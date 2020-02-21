@@ -31,10 +31,6 @@ sudo apt -y install python-rosinstall python-rosinstall-generator python-wstool 
 sudo apt -y install python-wstool python-catkin-tools
 wstool init
 
-echo -e '\e[1;31m == Install sbgisen packages == \e[m'
-wstool set -y --git ros_controllers git@github.com:sbgisen/ros_controllers.git
-wstool update
-
 echo -e '\e[1;31m == Set permssion to access == \e[m'
 sudo usermod -a -G dialout $USER
 sudo usermod -a -G video $USER
@@ -47,7 +43,8 @@ cd raspberrypi_cube_moc/cube_petit/
 catkin bt
 
 # add bashrc
-echo ./add_bashrc.txt >> ~/.bashrc
+cd ~/git/setup_cube_petit
+cat ~/git/setup_cube_petit/add_bashrc.txt >> ~/.bashrc
 mkdir ~/shell_scripts
 cp ./shell_utils/* ~/shell_scripts/
 
@@ -123,6 +120,9 @@ sudo apt install librealsense2:=2.30.0*
 sudo apt install ros-melodic-udev-rules:=2.30.0.*
 sudo apt install ros-melodic-librealsense2-dkms
 sudo apt install ros-melodic-librealsense2
+
+echo "export ROS_MASTER_URI=http://${PC_IP}:11311" >> ~/.bashrc
+echo "export ROS_IP=${PC_IP}" >> ~/.bashrc
 
 catlkin build
 
