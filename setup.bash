@@ -103,9 +103,7 @@ cd dynamixel_control_hw
 cp CMakeLists.txt CMakeLists.txt.old
 sed -e "s/set(LIBDYNAMIXEL \"\")/set(LIBDYNAMIXEL \"\/home\/gisen\/ros\/src\/libdynamixel\")/g" CMakeLists.txt > tmp
 mv tmp CMakeLists.txt
-##[TODO]
-#set(LIBDYNAMIXEL "/home/gisen/ros/src/libdynamixel")
-# 
+cd ../
 
 
 # lh_laser_driver
@@ -116,11 +114,17 @@ git clone https://github.com/sbgisen/hector_slam.git
 git clone https://github.com/ros-teleop/teleop_twist_joy.git
 
 # intel-realsense
+sudo apt-key adv --keyserver keys.gnupg.net --recv-key F6E65AC044F831AC80A06380C8B3A55A6F3EFCDE || sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-key F6E65AC044F831AC80A06380C8B3A55A6F3EFCDE
+sudo add-apt-repository "deb http://realsense-hw-public.s3.amazonaws.com/Debian/apt-repo bionic main" -u
+
+## [DO WITH SYNAPTIC]
+
 sudo apt install ros-melodic-realsense2-camera:=2.2.12*
 sudo apt install librealsense2:=2.30.0*
 sudo apt install ros-melodic-udev-rules:=2.30.0.*
 sudo apt install ros-melodic-librealsense2-dkms
 sudo apt install ros-melodic-librealsense2
+##[todo synapticでバージョンロック]
 
 echo "export ROS_MASTER_URI=http://${PC_IP}:11311" >> ~/.bashrc
 echo "export ROS_IP=${PC_IP}" >> ~/.bashrc
