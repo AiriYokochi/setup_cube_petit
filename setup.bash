@@ -50,8 +50,9 @@ cp ./shell_utils/* ~/shell_scripts/
 
 # add udev
 sudo cp ./udevs/* /etc/udev/rules.d/
-sudo echo usb_add_vendor.txt >> /etc/udev/99-usb-serial.rules
-sudo /etc/init.d/udev reaload
+## sudo cat usb_add_vendor.txt >> /etc/udev/99-usb-serial.rules
+##permittion denied
+sudo /etc/init.d/udev reload
 
 source ~/.bashrc
 
@@ -61,29 +62,21 @@ sudo apt install synaptic -y
 
 # apt get ros-melodic-package
 
-sudo apt install ros-melodic-amcl
-sudo apt install ros-melodic-move-base
-sudo apt install ros-melodic-gmapping
+sudo apt install ros-melodic-amcl -y
+sudo apt install ros-melodic-move-base -y
+sudo apt install ros-melodic-gmapping -y
 sudo apt install ros-melodic-hector-map-server -y
-sudo apt install ros-melodic-hector-compressed-map-transporte -y
 sudo apt install ros-melodic-hector-compressed-map-transport -y
-sudo apt install libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev
-sudo apt install libssl-dev libusb-1.0-0-dev pkg-config libgtk-3-dev
+sudo apt install libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev -y
+sudo apt install libssl-dev libusb-1.0-0-dev pkg-config libgtk-3-dev -y
 
-sudo apt install ros-melodic-ackermans-steering-controller
-sudo apt install ros-melodic-action-base-local-planner
-sudo apt install ros-melodic-bond
-sudo apt install ros-melodic-clear-costmap-recovery
-
-sudo apt install ros-melodic-catkin ros-melodic-rospy ros-melodic-roscpp ros-melodic-urdf ros-melodic-std-msgs ros-melodic-message-generation
-sudo apt install ros-melodic-hardware-interface
-sudo apt install ros-melodic-combined-robot-hw
-sudo apt install ros-melodic-controller-manager
-sudo apt install ros-melodic-joint-state-publisher
+sudo apt install ros-melodic-ackermann-steering-controller -y
+sudo apt install ros-melodic-combined-robot-hw -y
 
 # ddynamic
 
-sudo apt install ros-melodic-ddynamic-reconfigure:=0.2.0
+sudo apt install ros-melodic-ddynamic-reconfigure:=0.2.0*
+## [todo synapticでバージョンロック]
 
 
 # ros-controllers
@@ -99,13 +92,21 @@ cd ../
 # dynamixel
 sudo apt install ros-melodic-dynamixel-sdk
 git clone https://github.com/AiriYokochi/libdynamixel.git
+cd ~/ros/src/
 cd libdynamixel
 sudo ./waf configure
 sudo ./waf
 sudo ./waf install
-sudo vi CMakeList.txt
 cd ../
 git clone --recursive https://github.com/AiriYokochi/dynamixel_control_hw.git
+cd dynamixel_control_hw
+cp CMakeLists.txt CMakeLists.txt.old
+sed -e "s/set(LIBDYNAMIXEL \"\")/set(LIBDYNAMIXEL \"\/home\/gisen\/ros\/src\/libdynamixel\")/g" CMakeLists.txt > tmp
+mv tmp CMakeLists.txt
+##[TODO]
+#set(LIBDYNAMIXEL "/home/gisen/ros/src/libdynamixel")
+# 
+
 
 # lh_laser_driver
 git clone https://github.com/AiriYokochi/lh_laser_driver.git
