@@ -1,0 +1,73 @@
+export PS1="\n"$PS1
+
+source "~/ros/devel/setup.bash"
+alias v="vim $@"
+alias vi="vim $@"
+alias gitch="git checkout $@"
+alias gitbr="git branch $@"
+alias gitad="git add $@"
+alias gitadd="git add ."
+alias gitcm="git commit $@"
+alias gitcmv="git commit -v $@"
+alias gitdf="git diff $@"
+alias gitst="git status"
+alias gitfe="git fetch $@"
+alias agi="sudo apt install $@"
+alias a="alias"
+alias g="git"
+alias mkcd="mkdir -p $@ && cd $@"
+alias l="ls"
+alias cl="clear"
+alias ..="cd ../"
+alias ....="cd ../../"
+alias ......="cd ../../../"
+alias gitlog="git log --oneline $@"
+alias gitbra="git branch -a"
+alias editbash="vim ~/.bashrc"
+alias gitaddcm="git add . $@ && git commit -v"
+function sav(){
+ echo -e "[ $(date '+%Y-%m-%d %H:%M:%S') ] $@" >> ~/documents_airly/config_airly.txt;
+ $@
+}
+alias mkdircd="mkdir $1 && cd $_"
+alias sav=sav
+alias bashrc="source ~/.bashrc"
+alias psgrep="ps aux |grep -v grep| grep $@"
+alias psgr="ps aux |grep -v grep | grep $@ | awk '{$2=\"\033[0;31m\"$2\"\033[0;39m\";$12=\"\033[0;33m\"$12\"\033[0;39m\";print $2, $11, $12, $13, $14}'"
+source /opt/ros/kinetic/setup.bash
+export DISPLAY=:0.0
+export LIBGL_ALWAYS_SOFTWARE=1
+A="/home/gisen/ros/src/sbgisen/ros_study_airly/"
+B="/home/gisen/ros/src/sbgisen/ros_study_airly/docs/daily/2020/202001"
+alias cda="cd $A"
+alias cdc="cd $B"
+X="/home/gisen/"
+alias cdsav='X=`pwd`'
+alias cdx="cd $X"
+alias editbashc='code ~/.bashrc'
+alias his="history"
+alias hisaptall="cat /var/log/apt/history.log"
+alias hisapt='cat /var/log/apt/history.log |grep Commandline | sed -e "s/Commandline://g"'
+alias psgrepkill="bash /home/gisen/shell_scripts/ps_grep_kill.sh $@"
+alias rg="rqt_graph"
+alias rosr="rosrun $@"
+alias rosl="roslaunch $@"
+alias ross="rosservice $@"
+alias rost="rostopic $@"
+alias rtree="rosrun rqt_tf_tree rqt_tf_tree"
+
+alias codenew="code `ls -la -t -F  | grep -v / | awk 'NR==2{print $9}'`"
+
+xinput set-prop "Sony PLAYSTATION(R)3 Controller" "Device Enabled" 0
+export PATH=$PATH:/home/gisen/ros/src/sbgisen/mixcell/QTCode
+export PYTHONPATH=$PYTHONPATH:/home/gisen/ros/src/sbgisen/mixcell/source_code
+export LIBDYNAMIXEL=/home/gisen/ros/src/libdynamixel
+
+# for cube-petit
+export ROS_MASTER_URI=http://192.168.12.20:11311
+export ROS_IP=192.168.12.20
+
+# U2D2
+# sudo su
+# echo 1 > /sys/bus/usb-serial/devices/ttyUSB0/latency_timer
+# exit
