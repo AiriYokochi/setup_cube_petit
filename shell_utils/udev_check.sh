@@ -21,16 +21,16 @@ fi
 
 #ttyDYNAMIXEL_2.4.2
 #ttyPACECAT_2.4.3
-CMD1=`ls /dev/ttyDYNAMIXEL_2.4.2`
-if [ "${CMD1}" == "/dev/ttyDYNAMIXEL_2.4.2" ];then
-        echo "[INFO] ttyDYNAMIXEL_2.4.2 [OK]"
+CMD1=`ls /dev/ttyDYNAMIXEL*`
+if [ "${CMD1}" != "" ];then
+        echo "[INFO] ${CMD1} :[OK]"
 else
-        echo "[WARN] ***ttyDYNAMIXEL_2.4.2  IS NOT FOUND***"
+        echo "[WARN] ***ttyDYNAMIXEL  IS NOT FOUND***"
 fi
 
-CMD1=`ls /dev/ttyPACECAT_2.4.3`
-if [ "${CMD1}" == "/dev/ttyPACECAT_2.4.3" ];then
-        echo "[INFO] ttyPACECAT_2.4.3 [OK]"
+CMD1=`ls /dev/ttyPACECAT*`
+if [ "${CMD1}" != "" ];then
+        echo "[INFO] ${CMD1} :[OK]"
 else
         echo "[WARN] ***ttyPACECAT_2.4.3  IS NOT FOUND***"
 fi

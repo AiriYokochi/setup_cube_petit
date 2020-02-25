@@ -77,3 +77,7 @@ export ROS_IP=192.168.12.20
 # sudo su
 # echo 1 > /sys/bus/usb-serial/devices/ttyUSB0/latency_timer
 # exit
+
+# SCREEN
+alias screensize="xdpyinfo | grep 'dimensions' | egrep -o '[0-9]+x[0-9]+' | head -1"
+alias background="display -window root -resize \`screensize\`"

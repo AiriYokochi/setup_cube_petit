@@ -85,6 +85,11 @@ echo "[todo synapticでros-melodic-ddynamic-reconfigureバージョンロック]
 
 mkdir -p ~/ros/src/sbgisen
 cd ~/ros/src/sbgisen
+
+git clone https://github.com/sbgisen/cube
+cd cube
+touch CATKIN_IGNORE
+cd ../
 git clone https://github.com/sbgisen/ros_controllers.git
 cd ros_controllers
 git checkout feature/odom_initialization
@@ -135,5 +140,9 @@ sudo apt install ros-melodic-librealsense2
 
 echo "export ROS_MASTER_URI=http://${PC_IP}:11311" >> ~/.bashrc
 echo "export ROS_IP=${PC_IP}" >> ~/.bashrc
+
+
+source ~/.bashrc
+background ~/ros/src/sbgisen/cube/face_expression/imgs/normal.png
 
 echo "reboot and catkin build"
