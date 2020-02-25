@@ -62,8 +62,8 @@ export PATH=$PATH:/home/gisen/ros/src/sbgisen/mixcell/QTCode
 export PYTHONPATH=$PYTHONPATH:/home/gisen/ros/src/sbgisen/mixcell/source_code
 export LIBDYNAMIXEL=/home/gisen/ros/src/libdynamixel
 
-source ~/shell_util/udev_check.sh
-alias udev_check="source ~/shell_util/udev_check.sh"
+source ~/shell_scripts/udev_check.sh
+alias udev_check="source ~/shell_scripts/udev_check.sh"
 alias 01bring="roslaunch cube_petit cube_petit_bringup.launch"
 alias 02gmap="roslaunch cube_petit cube_petit_gmapping.launch"
 alias 02navi="roslaunch cube_petit cube_petit_navigation.launch"
