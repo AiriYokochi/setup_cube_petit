@@ -1,6 +1,6 @@
 export PS1="\n"$PS1
 
-source "~/ros/devel/setup.bash"
+source ~/ros/devel/setup.bash
 alias v="vim $@"
 alias vi="vim $@"
 alias gitch="git checkout $@"
@@ -61,6 +61,13 @@ xinput set-prop "Sony PLAYSTATION(R)3 Controller" "Device Enabled" 0
 export PATH=$PATH:/home/gisen/ros/src/sbgisen/mixcell/QTCode
 export PYTHONPATH=$PYTHONPATH:/home/gisen/ros/src/sbgisen/mixcell/source_code
 export LIBDYNAMIXEL=/home/gisen/ros/src/libdynamixel
+
+source ~/shell_util/udev_check.sh
+alias udev_check="source ~/shell_util/udev_check.sh"
+alias 01bring="roslaunch cube_petit cube_petit_bringup.launch"
+alias 02gmap="roslaunch cube_petit cube_petit_gmapping.launch"
+alias 02navi="roslaunch cube_petit cube_petit_navigation.launch"
+
 
 # for cube-petit
 export ROS_MASTER_URI=http://192.168.12.20:11311

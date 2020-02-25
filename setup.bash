@@ -59,6 +59,7 @@ source ~/.bashrc
 
 # apt get synaptic
 sudo apt install synaptic -y
+sudo apt install htop -y
 
 # apt get ros-melodic-package
 
@@ -72,11 +73,12 @@ sudo apt install libssl-dev libusb-1.0-0-dev pkg-config libgtk-3-dev -y
 
 sudo apt install ros-melodic-ackermann-steering-controller -y
 sudo apt install ros-melodic-combined-robot-hw -y
+sudo apt install ros-melodic-map-server -y
 
 # ddynamic
 
 sudo apt install ros-melodic-ddynamic-reconfigure:=0.2.0*
-## [todo synapticでバージョンロック]
+echo "[todo synapticでros-melodic-ddynamic-reconfigureバージョンロック]"
 
 
 # ros-controllers
@@ -86,10 +88,13 @@ cd ~/ros/src/sbgisen
 git clone https://github.com/sbgisen/ros_controllers.git
 cd ros_controllers
 git checkout feature/odom_initialization
+touch ~/ros/src/sbgisen/ros_controllers/four_wheel_steering_contoller/CATKIN_IGNORE
+touch ~/ros/src/sbgisen/ros_controllers/ackermann_steering_controller/CATKIN_IGNORE 
 cd ../
 
 
 # dynamixel
+sudp apt install ros-melodic-ros-controll
 sudo apt install ros-melodic-dynamixel-sdk
 git clone https://github.com/AiriYokochi/libdynamixel.git
 cd ~/ros/src/
@@ -97,6 +102,8 @@ cd libdynamixel
 sudo ./waf configure
 sudo ./waf
 sudo ./waf install
+mkdir include
+sudo cp -r /usr/local/install/dynamixel ./include/
 cd ../
 git clone --recursive https://github.com/AiriYokochi/dynamixel_control_hw.git
 cd dynamixel_control_hw
@@ -118,16 +125,15 @@ sudo apt-key adv --keyserver keys.gnupg.net --recv-key F6E65AC044F831AC80A06380C
 sudo add-apt-repository "deb http://realsense-hw-public.s3.amazonaws.com/Debian/apt-repo bionic main" -u
 
 ## [DO WITH SYNAPTIC]
-
+echo "DO WITH SYNAPTIC
 sudo apt install ros-melodic-realsense2-camera:=2.2.12*
 sudo apt install librealsense2:=2.30.0*
 sudo apt install ros-melodic-udev-rules:=2.30.0.*
 sudo apt install ros-melodic-librealsense2-dkms
 sudo apt install ros-melodic-librealsense2
-##[todo synapticでバージョンロック]
+"
 
 echo "export ROS_MASTER_URI=http://${PC_IP}:11311" >> ~/.bashrc
 echo "export ROS_IP=${PC_IP}" >> ~/.bashrc
 
-catlkin build
-
+echo "reboot and catkin build"
