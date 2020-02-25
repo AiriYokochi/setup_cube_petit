@@ -145,4 +145,5 @@ echo "export ROS_IP=${PC_IP}" >> ~/.bashrc
 source ~/.bashrc
 cp ~/ros/src/sbgisen/cube/face_expression/imgs/*.png ~/Pictures/
 gsettings set org.gnome.shell.extensions.dash-to-dock autohide false && gsettings set org.gnome.shell.extensions.dash-to-dock dock-fixed false && gsettings set org.gnome.shell.extensions.dash-to-dock intellihide false
+gsettings set org.gnome.nautilus.desktop trash-icon-visible false
 echo "reboot and catkin build"
