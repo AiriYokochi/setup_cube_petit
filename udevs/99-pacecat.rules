@@ -1,3 +1,2 @@
-SUBSYSTEM=="tty", ATTRS{idVendor}=="0002", ATTRS{idProduct}=="1d6b", ATTRS{serial}=="0000:00:1a.0", SYMLINK+="pacecat-LiDAR", MODE="0666"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", SYMLINK+="ttyPACECAT_%s{devpath}"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", ATTRS{devpath}=="3.1", SYMLINK+="ttyPACECAT", MODE="0666"
 

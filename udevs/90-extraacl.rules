@@ -1,5 +1,0 @@
-
-# Setting serial port rules
-
-"KERNEL="ttyUSB[0-9]*", TAG+="udev-acl", TAG+="uaccess", OWNER="gisen"
-"KERNEL="ttyACM[0-9]*", TAG+="udev-acl", TAG+="uaccess", OWNER="gisen"

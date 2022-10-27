@@ -1,0 +1,4 @@
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="ad50", ATTRS{idProduct}=="60c4", MODE="0666", SYMLINK+="USB_CAN2", ACTION=="add", RUN+="/etc/udev/rules.d/startCan.sh"
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="ad50", ATTRS{idProduct}=="60c4", ACTION=="remove", RUN+="/etc/udev/rules.d/stopCan.sh"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="ad50", ATTRS{idProduct}=="60c4", MODE="0666", SYMLINK+="USB_CAN2", ACTION=="add", RUN+="/usr/sbin/service can@USB_CAN2.service start"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="ad50", ATTRS{idProduct}=="60c4", ACTION=="remove", RUN+="/usr/sbin/service can@USB_CAN2.service stop"

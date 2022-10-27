@@ -1,2 +1,0 @@
-SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6014", ATTRS{serial}=="FT2XP5G1", SYMLINK+="dynamicel-U2D2", MODE="0666"
-SUBSYSTEM=="tty", ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6014", SYMLINK+="ttyDYNAMIXEL_%s{devpath}"

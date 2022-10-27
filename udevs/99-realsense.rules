@@ -1,0 +1,2 @@
+# infrared camera
+ACTION=="add", SUBSYSTEM=="video4linux", SUBSYSTEMS=="usb", ATTRS{idProduct}=="8087", ATTRS{idVendor}=="0a2b", SYMLINK+="real_sense"
