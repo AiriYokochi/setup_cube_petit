@@ -1,0 +1,2 @@
+# infrared camera
+ACTION=="add", SUBSYSTEM=="video4linux", SUBSYSTEMS=="usb", ATTRS{idProduct}=="9230", ATTRS{idVendor}=="05a3", SYMLINK+="rear_camera"
