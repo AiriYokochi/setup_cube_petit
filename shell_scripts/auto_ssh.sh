@@ -1,6 +1,6 @@
 #!/bin/sh
 
-PW="gisen55"
+PW="<INPUT PC PASSWORD>"
 IP=$1
 
 expect -c "
