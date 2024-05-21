@@ -18,6 +18,8 @@ sudo apt install -y ros-humble-desktop
 echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
 echo "export ROS_DOMAIN_ID=1" >> ~/.bashrc
 echo "export ROS_LOCALHOST_ONLY=1" >> ~/.bashrc
+echo "source ~/ros/install/setup.bash" >> ~/.bashrc
+
 
 sudo apt install -y python3-rosdep
 sudo apt install -y ~nros-humble-rqt*
@@ -40,6 +42,10 @@ wstool init
 echo -e '\e[1;31m == Set permssion to access == \e[m'
 sudo usermod -a -G dialout $USER
 sudo usermod -a -G video $USER
+
+# # Install Cube-petit
+# echo -e '\e[1;31m == Set up Cube-petit == \e[m'
+
 
 
 
