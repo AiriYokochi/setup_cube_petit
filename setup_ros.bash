@@ -21,9 +21,17 @@ echo "export ROS_LOCALHOST_ONLY=1" >> ~/.bashrc
 
 sudo apt install -y python3-rosdep
 sudo apt install -y ~nros-humble-rqt*
+sudo apt install -y python3-pip
+pip3 install -U colcon-common-extensions
+
+echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc
 
 mkdir -p ~/ros/src
 cd ~/ros/src
+cd ~/ros
+sudo rosdep init
+rosdep update
+source ~/.bashrc
 
 sudo apt -y install python3-rosinstall python3-rosinstall-generator build-essential
 sudo apt -y install python3-wstool
@@ -32,6 +40,8 @@ wstool init
 echo -e '\e[1;31m == Set permssion to access == \e[m'
 sudo usermod -a -G dialout $USER
 sudo usermod -a -G video $USER
+
+
 
 # # Install Cube-petit
 # echo -e '\e[1;31m == Set up Cube-petit == \e[m'
