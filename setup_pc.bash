@@ -14,6 +14,9 @@ LANG=C xdg-user-dirs-gtk-update
 # blanc screen iff
 gsettings set org.gnome.desktop.session idle-delay  0
 
+# hide side-bar
+gsettings set org.gnome.shell.extensions.dash-to-dock autohide false && gsettings set org.gnome.shell.extensions.dash-to-dock dock-fixed false && gsettings set org.gnome.shell.extensions.dash-to-dock intellihide false
+
 # Download Chrome
 cd ~/Downloads
 wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && sudo dpkg -i google-chrome-stable_current_amd64.deb

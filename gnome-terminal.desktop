@@ -1,0 +1,3 @@
+[Desktop Entry]
+Exec=gnome-terminal --window --profile=cube-petit -- bash -c  "source ~/.bashrc; /opt/ros/humble/bin/ros2 launch cube_petit_bringup cube_petit_bringup.launch.py"
+Type=Application

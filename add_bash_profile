@@ -1,0 +1,3 @@
+source ~/.bashrc
+source /opt/ros/humble/setup.bash
+source ~/ros/install/setup.bash
