@@ -3,40 +3,42 @@
 cd
 
 # Install ROS Humble
-echo -e '\e[1;31m == Install ROS Humble == \e[m'
-sudo apt install -y software-properties-common
-sudo add-apt-repository universe
+echo -e '\e[1;31m == Install ROS Jazzy == \e[m'
+locale  # check for UTF-8
 
+sudo apt update && sudo apt install locales
+sudo locale-gen en_US en_US.UTF-8
+sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
+export LANG=en_US.UTF-8
+
+locale  # verify settings
+sudo apt install software-properties-common
+sudo add-apt-repository universe
 sudo apt update && sudo apt install curl -y
 sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
-
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
-
-sudo apt update && sudo apt upgrade
-sudo apt install -y ros-humble-desktop
-
-echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
-echo "export ROS_DOMAIN_ID=1" >> ~/.bashrc
-echo "export ROS_LOCALHOST_ONLY=1" >> ~/.bashrc
-echo "source ~/ros/install/setup.bash" >> ~/.bashrc
-
-sudo apt install -y python3-rosdep
-sudo apt install -y ~nros-humble-rqt*
-sudo apt install -y python3-pip
-pip3 install -U colcon-common-extensions
-
-echo 'export PATH=$PATH:~/.local/bin' >> ~/.bashrc
-
-mkdir -p ~/ros/src
-cd ~/ros/src
-cd ~/ros
+sudo apt update && sudo apt install -y \
+  python3-flake8-blind-except \
+  python3-flake8-class-newline \
+  python3-flake8-deprecated \
+  python3-mypy \
+  python3-pip \
+  python3-pytest \
+  python3-pytest-cov \
+  python3-pytest-mock \
+  python3-pytest-repeat \
+  python3-pytest-rerunfailures \
+  python3-pytest-runner \
+  python3-pytest-timeout \
+  ros-dev-tools
+  mkdir -p ~/ros/src
+cd ros
+vcs import --input https://raw.githubusercontent.com/ros2/ros2/jazzy/ros2.repos src
+sudo apt upgrade
 sudo rosdep init
 rosdep update
-source ~/.bashrc
-
-sudo apt -y install python3-rosinstall python3-rosinstall-generator build-essential
-sudo apt -y install python3-wstool
-wstool init
+rosdep install --from-paths src --ignore-src -y --skip-keys "fastcdr rti-connext-dds-6.0.1 urdfdom_headers"
+colcon build --symlink-install
 
 echo -e '\e[1;31m == Set permssion to access == \e[m'
 sudo usermod -a -G dialout $USER
