@@ -20,6 +20,11 @@ echo "export ROS_DOMAIN_ID=1" >> ~/.bashrc
 echo "export ROS_LOCALHOST_ONLY=1" >> ~/.bashrc
 echo "source ~/ros/install/setup.bash" >> ~/.bashrc
 
+touch ~/.bash_profile
+echo "source ~/.bashrc" >> ~/.bash_profile
+echo "source /opt/ros/humble/setup.bash" >> ~/.bash_profile
+echo "source ~/ros/install/setup.bash" >> ~/.bash_profile
+
 sudo apt install -y python3-rosdep
 sudo apt install -y ~nros-humble-rqt*
 sudo apt install -y python3-pip
@@ -45,7 +50,12 @@ sudo usermod -a -G video $USER
 # Install Cube-petit
 echo -e '\e[1;31m == Set up Cube-petit == \e[m'
 cd ~/ros/src/
-git clone git@github.com:sbgisen/cube_petit_ros.git
+git clone -b feature/humble_devel git@github.com:sbgisen/cube_petit_ros.git
+cd ~/ros
+# vcs import src < src/cube_petit_ros/.rosinstall 
+# rosdep install -r -y -i --from-paths src
+# colcon build --packages-select cube_petit_ros
+# source ~/ros/install/setup.bash
 
 # # intel-realsense
 # sudo apt-key adv --keyserver keys.gnupg.net --recv-key F6E65AC044F831AC80A06380C8B3A55A6F3EFCDE || sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-key F6E65AC044F831AC80A06380C8B3A55A6F3EFCDE
@@ -53,3 +63,7 @@ git clone git@github.com:sbgisen/cube_petit_ros.git
 
 mkdir -p ~/Pictures/Wallpapers
 cp ~/work/setup_cube_petit/pictures/*.png ~/Pictures/Wallpapers
+
+# AutoStart
+# mkdir -p ~/.config/autostart
+# cp gnome-terminal.desktop ~/.config/autostart
