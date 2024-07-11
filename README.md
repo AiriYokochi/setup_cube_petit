@@ -21,13 +21,16 @@ This is setup script for Cube petit(Real robot)
 - Internet
 
 ## How to Install
-1. Open terminal and install git and etc
+1. Open terminal and install git and ssh
 
     ```
-    sudo apt install -y libappindicator1 git net-tools openssh-server
+    sudo apt install -y ssh git
+    cd .ssh
+    ssh-keygen
+    cat ~/.ssh/id_rsa.pub 
     ```
 
-2. Set SSH key to Github
+2. Set SSH key to Github (Acsess `https://github.com/settings/keys`)
 
 3. Git clone this repo
     ```
@@ -59,22 +62,17 @@ Check SETUP_WIFI.md
 
 ## Auto Bring Up
     About auto ros2 start
-    1. autostart
+    Autostart
     ```
     cd ~/work/setup_cube_petit
     mkdir -p ~/.config/autostart
     cp gnome-terminal.desktop ~/.config/autostart/
     ```
-    2. add .bash_profile
-    ```
-    cd ~/work/setup_cube_petit
-    cat add_bash_profile >> ~/.bash_profile
-    ```
 
 
 ## Description for setup.bash
 
-- [x] Install ROS Noetic (Ubuntu20.04)
+- [x] Install ROS Humble (Ubuntu22.04)
 - [x] Add udev files to `/etc/udev/rules.d/`
 - [x] Add Shell scripts to `~/shell_scripts/`
 - [x] Add alias to `~/.bashrc`

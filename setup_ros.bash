@@ -66,6 +66,8 @@ rosdep install -r -y -i --from-paths src
 
 mkdir -p ~/Pictures/Wallpapers
 cp ~/work/setup_cube_petit/pictures/*.png ~/Pictures/Wallpapers
+gsettings set org.gnome.desktop.background picture-uri "file://${HOME}/Pictures/Wallpapers/happy.png"
+
 
 # AutoStart
 # mkdir -p ~/.config/autostart

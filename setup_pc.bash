@@ -55,3 +55,7 @@ mv pyenv .pyenv
 
 # (Optional) Formatter Linter
 sudo apt install -y clangd
+
+# Setup can service
+cd ~/work/setup_cube_petit/can_service
+source setup_auto_canable.sh
