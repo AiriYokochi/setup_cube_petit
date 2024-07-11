@@ -41,6 +41,8 @@ source ~/.bashrc
 
 sudo apt -y install python3-rosinstall python3-rosinstall-generator build-essential
 sudo apt -y install python3-wstool
+sudo apt -y install python3-vcstool
+cd ~/ros/src
 wstool init
 
 echo -e '\e[1;31m == Set permssion to access == \e[m'
@@ -50,12 +52,13 @@ sudo usermod -a -G video $USER
 # Install Cube-petit
 echo -e '\e[1;31m == Set up Cube-petit == \e[m'
 cd ~/ros/src/
-git clone -b feature/humble_devel git@github.com:sbgisen/cube_petit_ros.git
-cd ~/ros
-# vcs import src < src/cube_petit_ros/.rosinstall 
-# rosdep install -r -y -i --from-paths src
-# colcon build --packages-select cube_petit_ros
-# source ~/ros/install/setup.bash
+git clone -b feature/humble_setup git@github.com:sbgisen/cube_petit_ros.git
+wstool merge cube_petit_ros/.rosinstall
+wstool up
+rosdep install -r -y -i --from-paths src
+# colcon build
+# source install/setup.bash
+
 
 # # intel-realsense
 # sudo apt-key adv --keyserver keys.gnupg.net --recv-key F6E65AC044F831AC80A06380C8B3A55A6F3EFCDE || sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-key F6E65AC044F831AC80A06380C8B3A55A6F3EFCDE
