@@ -44,8 +44,6 @@ gsettings set org.gnome.shell.extensions.ding show-home false
 sudo apt install -y ibus-mozc
 
 # (Optional)Download Peek
-sudo add-apt-repository ppa:peek-developers/stable
-sudo apt update
 sudo apt install -y peek
 
 # (Optional)Download pyenv
