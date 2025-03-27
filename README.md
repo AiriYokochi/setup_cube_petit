@@ -38,7 +38,7 @@ This is setup script for Cube petit(Real robot)
 3. Git clone this repo
     ```
     mkdir -p ~/work && cd ~/work/
-    git clone git@github.com:AiriYokochi/setup_cube_petit.git -b feature/ros2_jazzy
+    git clone https://github.com/AiriYokochi/setup_cube_petit.git -b feature/ros2_jazzy
     cd setup_cube_petit
     ```
 
