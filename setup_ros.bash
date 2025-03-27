@@ -3,7 +3,7 @@
 cd
 
 # Install ROS Humble
-echo -e '\e[1;31m == Install ROS Jazzy == \e[m'
+echo -e '\e[1;31m == Install ROS2 Jazzy == \e[m'
 locale  # check for UTF-8
 
 sudo apt update && sudo apt install locales
@@ -12,33 +12,17 @@ sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
 export LANG=en_US.UTF-8
 
 locale  # verify settings
-sudo apt install software-properties-common
+sudo apt install -y software-properties-common
 sudo add-apt-repository universe
 sudo apt update && sudo apt install curl -y
 sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
-sudo apt update && sudo apt install -y \
-  python3-flake8-blind-except \
-  python3-flake8-class-newline \
-  python3-flake8-deprecated \
-  python3-mypy \
-  python3-pip \
-  python3-pytest \
-  python3-pytest-cov \
-  python3-pytest-mock \
-  python3-pytest-repeat \
-  python3-pytest-rerunfailures \
-  python3-pytest-runner \
-  python3-pytest-timeout \
-  ros-dev-tools
-  mkdir -p ~/ros/src
-cd ros
-vcs import --input https://raw.githubusercontent.com/ros2/ros2/jazzy/ros2.repos src
+sudo apt update && sudo apt install -y ros-dev-tools
+
+sudo apt update
 sudo apt upgrade
-sudo rosdep init
-rosdep update
-rosdep install --from-paths src --ignore-src -y --skip-keys "fastcdr rti-connext-dds-6.0.1 urdfdom_headers"
-colcon build --symlink-install
+sudo apt install -y ros-jazzy-desktop python3-rosdep
+echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 
 echo -e '\e[1;31m == Set permssion to access == \e[m'
 sudo usermod -a -G dialout $USER
@@ -46,12 +30,19 @@ sudo usermod -a -G video $USER
 
 # Install Cube-petit
 echo -e '\e[1;31m == Set up Cube-petit == \e[m'
-cd ~/ros/src/
-git clone git@github.com:sbgisen/cube_petit_ros.git
+mkdir -p ~/ros/src && cd ~/ros/src/
+sudo rosdep init 
+rosdep update
 
-# # intel-realsense
-# sudo apt-key adv --keyserver keys.gnupg.net --recv-key F6E65AC044F831AC80A06380C8B3A55A6F3EFCDE || sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-key F6E65AC044F831AC80A06380C8B3A55A6F3EFCDE
-# sudo add-apt-repository "deb http://realsense-hw-public.s3.amazonaws.com/Debian/apt-repo bionic main" -u
+RIPVCS_VERSION=$(curl -s "https://api.github.com/repos/ErickKramer/ripvcs/releases/latest" | \grep -Po '"tag_name": *"v\K[^"]*')
+ARCHITECTURE="linux_amd64"
+curl -Lo ~/.local/bin/rv "https://github.com/ErickKramer/ripvcs/releases/download/v${RIPVCS_VERSION}/ripvcs_${RIPVCS_VERSION}_${ARCHITECTURE}"
+chmod +x ~/.local/bin/rv
 
-mkdir -p ~/Pictures/Wallpapers
-cp ~/work/setup_cube_petit/pictures/*.png ~/Pictures/Wallpapers
+git clone git@github.com:sbgisen/cube_petit_ros.git -b feature/ros2_jazzy
+rv import -r -i cube_petit_ros/cube_petit_ros.repos
+
+rosdep install --from-paths . --ignore-src -r -y
+
+cd ~/ros
+colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release

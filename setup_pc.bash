@@ -21,19 +21,6 @@ gsettings set org.gnome.shell.extensions.dash-to-dock autohide false && gsetting
 cd ~/Downloads
 wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb && sudo dpkg -i google-chrome-stable_current_amd64.deb
 
-# Download GitKraken
-cd ~/Downloads
-wget https://release.gitkraken.com/linux/gitkraken-amd64.deb && sudo dpkg --install gitkraken-amd64.deb
-
-# Download VS Code
-sudo apt install curl
-curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > microsoft.gpg
-sudo install -o root -g root -m 644 microsoft.gpg /etc/apt/trusted.gpg.d/
-sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main" > /etc/apt/sources.list.d/vscode.list'
-sudo apt install apt-transport-https
-sudo apt update
-sudo apt install -y code
-
 # Set Favorite app
 gsettings set org.gnome.shell favorite-apps "['google-chrome.desktop', 'org.gnome.Nautilus.desktop', 'org.gnome.Terminal.desktop', 'code.desktop']"
 
@@ -43,13 +30,6 @@ gsettings set org.gnome.shell.extensions.ding show-home false
 # Japanese Input
 sudo apt install -y ibus-mozc
 
-# (Optional)Download Peek
-sudo apt install -y peek
-
-# (Optional)Download pyenv
-cd ~/
-git clone https://github.com/pyenv/pyenv.git
-mv pyenv .pyenv
-
-# (Optional) Formatter Linter
-sudo apt install -y clangd
+# Wall paper
+mkdir -p ~/Pictures/Wallpapers
+cp ~/work/setup_cube_petit/pictures/*.png ~/Pictures/Wallpapers

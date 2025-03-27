@@ -17,33 +17,39 @@ This is setup script for Cube petit(Real robot)
 [Github: cube_petit_ros]()
 
 ## Requirements
-- PC (Ubuntu22.04)
+- Ubuntu24.04
 - Internet
 
 ## How to Install
 1. Open terminal and install git and etc
 
     ```
-    sudo apt install -y libappindicator1 git net-tools openssh-server
+    sudo apt install -y git ssh
     ```
 
-2. Set SSH key to Github
+2. Set SSH key to Github (If you need)
+
+    ```
+    cd ~/.ssh
+    ssh-keygen
+    ```
+    access to : https://github.com/settings/keys
 
 3. Git clone this repo
     ```
-    mkdir -p ~/lib && cd ~/work/
-    git clone git@github.com:AiriYokochi/setup_cube_petit.git
+    mkdir -p ~/work && cd ~/work/
+    git clone git@github.com:AiriYokochi/setup_cube_petit.git -b feature/ros2_jazzy
     cd setup_cube_petit
-    source setup_pc.bash
-    source setup_ros.bash
     ```
 
-4. Set IP Address
-Check SETUP_WIFI.md
+    `source setup.pc` : Set Wallpaper, Install chrome, Hide side bar, Set Power
+    `source setup_dev_tools.sh` : (Option) Install gitKraken, VSCode
+    `source setup_ros2.sh` : Install ROS2 Jazzy and cube_petit_ros repository
+
 
 ## Test
 1. Put PC inside the robot
-1. Connect **power**, **ethernet**, **2 USB** and **HDMI** connector
+1. Connect **power**, , **2 USB** and **HDMI** connector
 1. **Power ON** PC and Cube petit's Face is displayed
 1. **Network** Setting
 1. **Speaker and Mic** Setting
@@ -56,26 +62,3 @@ Check SETUP_WIFI.md
     ``` 
 1. Check **Controller** is available
 1. Set **Auto Bring Up**
-
-## Auto Bring Up
-    About auto ros2 start
-    1. autostart
-    ```
-    cd ~/work/setup_cube_petit
-    mkdir -p ~/.config/autostart
-    cp gnome-terminal.desktop ~/.config/autostart/
-    ```
-    2. add .bash_profile
-    ```
-    cd ~/work/setup_cube_petit
-    cat add_bash_profile >> ~/.bash_profile
-    ```
-
-
-## Description for setup.bash
-
-- [x] Install ROS Noetic (Ubuntu20.04)
-- [x] Add udev files to `/etc/udev/rules.d/`
-- [x] Add Shell scripts to `~/shell_scripts/`
-- [x] Add alias to `~/.bashrc`
-- [x] Change Background Image
