@@ -33,3 +33,4 @@ sudo apt install -y ibus-mozc
 # Wall paper
 mkdir -p ~/Pictures/Wallpapers
 cp ~/work/setup_cube_petit/pictures/*.png ~/Pictures/Wallpapers
+gsettings set org.gnome.desktop.background picture-uri "file:///home/cube-petit//Pictures/Wallpapers/happy.png"

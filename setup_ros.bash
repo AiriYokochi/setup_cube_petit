@@ -34,14 +34,21 @@ mkdir -p ~/ros/src && cd ~/ros/src/
 sudo rosdep init 
 rosdep update
 
-RIPVCS_VERSION=$(curl -s "https://api.github.com/repos/ErickKramer/ripvcs/releases/latest" | \grep -Po '"tag_name": *"v\K[^"]*')
-ARCHITECTURE="linux_amd64"
-curl -Lo ~/.local/bin/rv "https://github.com/ErickKramer/ripvcs/releases/download/v${RIPVCS_VERSION}/ripvcs_${RIPVCS_VERSION}_${ARCHITECTURE}"
+# Install ripvcs
+cd ~/work
+sudo apt install golang-go
+git clone https://github.com/ErickKramer/ripvcs
+cd ripvcs
+go build -o rv main.go
+mkdir -p  ~/.local/bin/rv
+mv rv ~/.local/bin/rv
 chmod +x ~/.local/bin/rv
+echo 'export PATH="$HOME/.local/bin/rv:$PATH"' >> ~/.bashrc
 
-git clone git@github.com:sbgisen/cube_petit_ros.git -b feature/ros2_jazzy
-rv import -r -i cube_petit_ros/cube_petit_ros.repos
-
+# Install cube_petit_ros
+cd ~/ros/src/
+git clone git@github.com:sbgisen/cube_petit_ros.git -b feature/jazzy_devel_gazebo
+# rv import -r -i cube_petit_ros/cube_petit_ros.repos
 rosdep install --from-paths . --ignore-src -r -y
 
 cd ~/ros
