@@ -6,3 +6,6 @@ Type=Simple
 User=root
 ExecStart=/usr/local/bin/startCan.sh %i
 ExecStop=/usr/local/bin/stopCan.sh
+
+[Install]
+WantedBy=multi-user.target
