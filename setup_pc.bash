@@ -5,7 +5,7 @@ cd ~/work/setup_cube_petit
 echo -e '\e[1;31m == Install and setup Udev rules == \e[m'
 sudo cp udevs/* /etc/udev/rules.d/
 sudo cp -r shell_scripts ~/
-echo "alias psgrepkill=\"bash ~/shell_scripts/ps_grep_kill.sh \$@\""  >> ~/.bashrc
+echo "alias psgrepkill=\"bash ~/shell_scripts/ps_grep_kill.sh \$@\"" >> ~/.bashrc
 cd
 
 # set home dir in English

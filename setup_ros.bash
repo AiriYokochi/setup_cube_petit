@@ -23,6 +23,7 @@ sudo apt update
 sudo apt upgrade
 sudo apt install -y ros-jazzy-desktop python3-rosdep
 echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
+echo "source ~/ros/install/setup.bash" >> ~/.bashrc
 
 echo -e '\e[1;31m == Set permssion to access == \e[m'
 sudo usermod -a -G dialout $USER
