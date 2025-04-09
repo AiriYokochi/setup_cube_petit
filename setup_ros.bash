@@ -50,7 +50,7 @@ echo 'export PATH="$HOME/.local/bin/rv:$PATH"' >> ~/.bashrc
 cd ~/ros/src/
 git clone git@github.com:sbgisen/cube_petit_ros.git -b feature/jazzy_devel_gazebo
 # rv import -r -i cube_petit_ros/cube_petit_ros.repos
-rosdep install --from-paths . --ignore-src -r -y
+rosdep install --from-path . --ignore-src -r -y
 
 cd ~/ros
 colcon build --symlink-install
