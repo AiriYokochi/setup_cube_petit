@@ -46,6 +46,11 @@ mv rv ~/.local/bin/rv
 chmod +x ~/.local/bin/rv
 echo 'export PATH="$HOME/.local/bin/rv:$PATH"' >> ~/.bashrc
 
+# Install uv
+curl -Ls https://astral.sh/uv/install.sh | bash
+echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
 # Install cube_petit_ros
 cd ~/ros/src/
 git clone git@github.com:sbgisen/cube_petit_ros.git -b feature/jazzy_devel_gazebo
