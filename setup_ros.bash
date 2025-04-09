@@ -6,7 +6,7 @@ cd
 echo -e '\e[1;31m == Install ROS2 Jazzy == \e[m'
 locale  # check for UTF-8
 
-sudo apt update && sudo apt install locales
+sudo apt update && sudo apt install -y locales
 sudo locale-gen en_US en_US.UTF-8
 sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
 export LANG=en_US.UTF-8
@@ -37,7 +37,7 @@ rosdep update
 
 # Install ripvcs
 cd ~/work
-sudo apt install golang-go
+sudo apt install -y golang-go
 git clone https://github.com/ErickKramer/ripvcs
 cd ripvcs
 go build -o rv main.go
@@ -53,4 +53,4 @@ git clone git@github.com:sbgisen/cube_petit_ros.git -b feature/jazzy_devel_gazeb
 rosdep install --from-paths . --ignore-src -r -y
 
 cd ~/ros
-colcon build --symlink-install --cmake-args -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release
+colcon build --symlink-install
