@@ -35,9 +35,9 @@ mkdir -p ~/Pictures/Wallpapers
 cp ~/work/setup_cube_petit/pictures/*.png ~/Pictures/Wallpapers
 gsettings set org.gnome.desktop.background picture-uri "file:///home/cube-petit//Pictures/Wallpapers/happy.png"
 
+# remove keyring for open Chrome
+rm ~/.local/share/keyrings/login.keyring
+
 # Auto login
 sudo sed -i '/^\[daemon\]/a AutomaticLoginEnable=true\nAutomaticLogin='$(whoami) /etc/gdm3/custom.conf
 sudo systemctl restart gdm
-
-# remove keyring for open Chrome
-rm ~/.local/share/keyrings/login.keyring
