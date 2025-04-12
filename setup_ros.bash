@@ -53,8 +53,8 @@ source ~/.bashrc
 
 # Install cube_petit_ros
 cd ~/ros/src/
-git clone git@github.com:sbgisen/cube_petit_ros.git -b feature/jazzy_devel_gazebo
-# rv import -r -i cube_petit_ros/cube_petit_ros.repos
+git clone git@github.com:sbgisen/cube_petit_ros.git -b feature/jazzy_hardware_interface
+vcs import . < ./cube_petit_ros/cube_petit_ros.repos
 rosdep install --from-path . --ignore-src -r -y
 
 cd ~/ros
