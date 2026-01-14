@@ -23,6 +23,7 @@ sudo apt install -y google-chrome-stable
 # remove keyring for open Chrome
 rm ~/.local/share/keyrings/login.keyring
 
+echo -e '\e[1;31m == Setup Udev rules == \e[m'
 # Udevs
 cd ~/work/setup_cube_petit
 echo -e '\e[1;31m == Setup Udev rules == \e[m'
@@ -30,8 +31,10 @@ sudo cp udevs/* /etc/udev/rules.d/
 sudo cp -r shell_scripts ~/
 echo "alias psgrepkill=\"bash ~/shell_scripts/ps_grep_kill.sh \$@\"" >> ~/.bashrc
 cd
+echo "export PS1=\"\n\"\$PS1" >> ~/.bashrc
+echo "export DISPLAY=:0.0" >> ~/.bashrc
+echo "export LIBGL_ALWAYS_SOFTWARE=1" >> ~/.bashrc
 
-echo -e '\e[1;31m == Setup Udev rules == \e[m'
 
 # blanc screen off
 gsettings set org.gnome.desktop.session idle-delay  0

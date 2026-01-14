@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 cd
 
@@ -20,10 +21,10 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-a
 sudo apt update && sudo apt install -y ros-dev-tools
 
 sudo apt update
-sudo apt upgrade
+sudo apt upgrade -y
 sudo apt install -y ros-jazzy-desktop python3-rosdep
-echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
-echo "source ~/ros/install/setup.bash" >> ~/.bashrc
+grep -qxF "source /opt/ros/jazzy/setup.bash" ~/.bashrc || echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
+grep -qxF "source ~/ros/install/setup.bash" ~/.bashrc || echo "source ~/ros/install/setup.bash" >> ~/.bashrc
 
 echo -e '\e[1;31m == Set permssion to access == \e[m'
 sudo usermod -a -G dialout $USER
@@ -32,30 +33,35 @@ sudo usermod -a -G video $USER
 # Install Cube-petit
 echo -e '\e[1;31m == Set up Cube-petit == \e[m'
 mkdir -p ~/ros/src && cd ~/ros/src/
-sudo rosdep init 
+sudo rosdep init 2>/dev/null || true
 rosdep update
 
 # Install ripvcs
+echo -e '\e[1;31m == Install ripvcs == \e[m'
 cd ~/work
-sudo apt install -y golang-go
+sudo apt install -y golang-go python3-vcstool
 git clone https://github.com/ErickKramer/ripvcs
 cd ripvcs
 go build -o rv main.go
-mkdir -p  ~/.local/bin/rv
+mkdir -p ~/.local/bin
 mv rv ~/.local/bin/rv
 chmod +x ~/.local/bin/rv
-echo 'export PATH="$HOME/.local/bin/rv:$PATH"' >> ~/.bashrc
+grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' ~/.bashrc || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 
 # Install uv
+echo -e '\e[1;31m == Install uv == \e[m'
 curl -Ls https://astral.sh/uv/install.sh | bash
 echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 
 # Install cube_petit_ros
+echo -e '\e[1;31m == Install cube_petit_ros == \e[m'
 cd ~/ros/src/
-git clone git@github.com:sbgisen/cube_petit_ros.git -b feature/jazzy_hardware_interface
+git clone https://github.com/sbgisen/cube_petit_ros.git -b feature/jazzy_devel
 vcs import . < ./cube_petit_ros/cube_petit_ros.repos
+source /opt/ros/jazzy/setup.bash
 rosdep install --from-path . --ignore-src -r -y
 
 cd ~/ros
 colcon build --symlink-install
+echo "Please reboot to apply group changes (dialout/video)."

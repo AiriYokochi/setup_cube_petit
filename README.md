@@ -1,20 +1,20 @@
 # setup_cube_petit
 
-This is setup script for Cube petit(Real robot)
+This is setup script for Cube petit(Real robot) <br>
 キューブプチ(ロボット実機)のPCをセットアップするスクリプトです
 
 ## What is Cube petit?
 - personal robot kit with **open-source software & hardware**
 - Easy Development Environment( Real robot or Simulator(Gazebo11) )
-- **SLAM & Navigation** as Basic Function(ROS1 avaiable)
+- **SLAM & Navigation** as Basic Function
 - **Easy Talk, Auto Charging**, etc as Advanced Function (ROS1 avaiable)
 - [Youtube]()
 - [Twitter (~2023/03/31)]()
 
 **If you develop in a simulator environment(your PC), please see here**
-自分のPC上で動かす場合は本スクリプトは必要ありません
+自分のPC上で動かす場合は本スクリプトは必要ありません<br>
 以下のリポジトリをクローンしてください
-[Github: cube_petit_ros]()
+[Github: cube_petit_ros](https://github.com/sbgisen/cube_petit_ros)
 
 ## Requirements
 - Ubuntu24.04
@@ -42,9 +42,21 @@ This is setup script for Cube petit(Real robot)
     cd setup_cube_petit
     ```
 
-    `source setup.pc` : Set Wallpaper, Install chrome, Hide side bar, Set Power
-    `source setup_dev_tools.sh` : (Option) Install gitKraken, VSCode
-    `source setup_ros2.sh` : Install ROS2 Jazzy and cube_petit_ros repository
+4. Run setup Script
+
+    1. `source setup_pc.bash` : Set Wallpaper, Install Chrome, Hide side bar, Set Power
+    1. `source setup_dev_tools.sh` : (Option) Install gitKraken, VSCode
+    1. `source setup_ros.bash` : Install ROS2 Jazzy and cube_petit_ros repository
+
+
+## Setup Script
+1. `setup_pc.bash`
+    - 実行するとパスワードを聞かれます。実行完了すると、一度画面が暗くなって顔の壁紙が表示されます。
+1. `setup_dev_tools.sh`
+    - 実行すると各ツールをインストールするか聞かれます。インストールする際はエンターキーを押してください。パスワードを聞かれます。
+1. `setup_ros.bash`
+    - 実行するとパスワードを聞かれます。またエンターキーを求められるタイミングがあります。
+1. `setup_devices.bash`
 
 
 ## Test
