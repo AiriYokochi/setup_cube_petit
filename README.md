@@ -47,6 +47,7 @@ This is setup script for Cube petit(Real robot) <br>
     1. `source setup_pc.bash` : Set Wallpaper, Install Chrome, Hide side bar, Set Power
     1. `source setup_dev_tools.sh` : (Option) Install gitKraken, VSCode
     1. `source setup_ros.bash` : Install ROS2 Jazzy and cube_petit_ros repository
+    1. `source setup_devices.bash` : Install IMU, Realsense[TODO]
 
 
 ## Setup Script
@@ -57,6 +58,7 @@ This is setup script for Cube petit(Real robot) <br>
 1. `setup_ros.bash`
     - 実行するとパスワードを聞かれます。またエンターキーを求められるタイミングがあります。
 1. `setup_devices.bash`
+    - 実行すると各デバイスをインストールするか聞かれます。Wifiはルータがセットアップしているとき、AudioはSoundBlasterがつながっているときに実行してください。
 
 
 ## Test
