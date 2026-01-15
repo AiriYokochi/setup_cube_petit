@@ -52,6 +52,7 @@ grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' ~/.bashrc || echo 'export PATH=
 echo -e '\e[1;31m == Install uv == \e[m'
 curl -Ls https://astral.sh/uv/install.sh | bash
 echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
+echo "export ROS_DOMAIN_ID=94" >> ~/.bashrc
 source ~/.bashrc
 
 # Install cube_petit_ros

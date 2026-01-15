@@ -79,10 +79,37 @@ fi
 
 
 # Setup Realsense
-if confirm "Setup RealSense? (TODO)"; then
+if confirm "Setup RealSense (build librealsense + udev rules)?"; then
   {
     echo -e '\e[1;32m == Setup RealSense == \e[m'
-    echo "TODO: RealSense setup not implemented yet"
+
+    # Create work directory
+    mkdir -p ~/work
+    cd ~/work || exit 1
+
+    # Clone librealsense
+    if [ ! -d "librealsense" ]; then
+      git clone https://github.com/IntelRealSense/librealsense.git
+    fi
+
+    cd librealsense || exit 1
+    git fetch --tags
+    git checkout v2.56.3
+    rm -rf build
+    mkdir build && cd build || exit 1
+    cmake .. \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/usr/local \
+      -DBUILD_EXAMPLES=ON \
+      -DBUILD_GRAPHICAL_EXAMPLES=ON \
+      -DFORCE_LIBUVC=ON
+    make -j$(nproc)
+    sudo make install
+    sudo ldconfig
+    sudo cp ~/work/librealsense/config/99-realsense-libusb.rules /etc/udev/rules.d/
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger
+    echo -e '\e[1;32m == RealSense setup completed == \e[m'
   } || echo -e "\e[1;31m [FAILED] Setup RealSense \e[m"
 else
   echo "Skip RealSense"
