@@ -11,7 +11,7 @@ sudo apt upgrade -y
 
 echo -e '\e[1;31m == apt install == \e[m'
 # Japanese Input
-sudo apt install -y ibus-mozc wget gpg
+sudo apt install -y ibus-mozc wget gpg net-tools
 # Chrome for face
 wget -qO- https://dl.google.com/linux/linux_signing_key.pub \
   | gpg --dearmor \
@@ -28,7 +28,9 @@ echo -e '\e[1;31m == Setup Udev rules == \e[m'
 cd ~/work/setup_cube_petit
 echo -e '\e[1;31m == Setup Udev rules == \e[m'
 sudo cp udevs/* /etc/udev/rules.d/
-sudo cp -r shell_scripts ~/
+cp -r shell_scripts ~/
+echo '[[ $- == *i* ]] && echo "Running udev_check.sh..." && ~/shell_scripts/udev_check.sh' >> ~/.bashrc
+
 echo "alias psgrepkill=\"bash ~/shell_scripts/ps_grep_kill.sh \$@\"" >> ~/.bashrc
 cd
 echo "export PS1=\"\n\"\$PS1" >> ~/.bashrc

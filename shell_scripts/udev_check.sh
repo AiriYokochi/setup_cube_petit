@@ -1,41 +1,166 @@
-#!/bin/bash
-echo "--------------------------------"
-echo "[INFO] UDEV CHECK START"
-CMD1=`udevadm info -a -n /dev/ttyUSB0 | grep idVendor |sed 's/^.*"\(.*\)".*$/\1/' | awk  'NR==1'`
+#!/usr/bin/env bash
 
-if [ "${CMD1}" == "0403"  ]; then
-	echo "[INFO] ttyUSB0 is DYNAMIXEL MOTOR:[OK]"
+GREEN="\e[32m"
+RED="\e[31m"
+NC="\e[0m"   # No Color
+
+DEVICES=(
+  "ttyWitMotion"   # IMU
+  "ttyCANable"     # CAN
+  "ttyLD06-19"     # LiDAR
+)
+# Set LiDAR dev path
+LIDAR_DEV="/dev/ttyLD06-19"
+LIDAR_TIMEOUT=0.1
+# Set IMU dev path
+IMU_DEV="/dev/ttyWitMotion"
+IMU_TIMEOUT=0.1
+
+echo "=== /dev device check ==="
+
+for dev in "${DEVICES[@]}"; do
+  if ls /dev | grep -q "^${dev}$"; then
+    echo -e "${GREEN}[OK]${NC} /dev/${dev} is found"
+  else
+    echo -e "${RED}[NG]${NC} /dev/${dev} is not found"
+  fi
+done
+
+echo ""
+echo "=== CAN (can0) check ==="
+
+if ifconfig can0 &>/dev/null; then
+  RX_PACKETS=$(ifconfig can0 | grep "RX packets" | awk '{print $3}')
+
+  if [[ -n "$RX_PACKETS" && "$RX_PACKETS" -gt 0 ]]; then
+    echo -e "${GREEN}[OK]${NC} can0 found, 、RX packets = ${RX_PACKETS}"
+  else
+    echo -e "${RED}[NG]${NC} can0 found, but RX packets is 0"
+  fi
 else
-	echo "[WARN] ***ttyUSB0 IS NOT DYNAMICEL MOTOR PLEASE CHECK***"
+  echo -e "${RED}[NG]${NC} No can0"
 fi
 
+echo ""
+echo "=== Wi-Fi interface ==="
+WIFI_INFO=$(ip -4 addr show | awk '
+  /^[0-9]+: / {
+    iface=$2
+    gsub(":", "", iface)
+  }
+  /inet / && iface ~ /^wl/ {
+    split($2, a, "/")
+    print iface, a[1]
+    exit
+  }
+')
 
-CMD1=`udevadm info -a -n /dev/ttyUSB1 | grep idVendor |sed 's/^.*"\(.*\)".*$/\1/' | awk  'NR==1'`
+if [[ -n "$WIFI_INFO" ]]; then
+  WIFI_IF=$(echo "$WIFI_INFO" | awk '{print $1}')
+  WIFI_IP=$(echo "$WIFI_INFO" | awk '{print $2}')
 
-if [ "${CMD1}" == "1a86" ]; then
-        echo "[INFO] ttyUSB1 is PACECAT LiDAR:[OK]"
+  echo -e "${GREEN}[OK]${NC} Wi-Fi IF = ${WIFI_IF}, IP = ${WIFI_IP}"
 else
-        echo "[WARN] ***ttyUSB1 IS NOT PACECAR LiDAR PLEASE CHECK***"
+  echo -e "${RED}[NG]${NC} No Wi-Fi IF"
 fi
 
+echo ""
+echo "=== Audio Device Check (Sound_Blaster required) ==="
 
-#ttyDYNAMIXEL_2.4.2
-#ttyPACECAT_2.4.3
-CMD1=`ls /dev/ttyDYNAMIXEL*`
-if [ "${CMD1}" != "" ];then
-        echo "[INFO] ${CMD1} :[OK]"
+# ----------------------------
+# Check microphone source
+# ----------------------------
+MIC_SOURCE=$(pactl list short sources \
+  | grep -v monitor \
+  | grep -i "Sound_Blaster" \
+  | awk '{print $2}' \
+  | head -n 1)
+
+if [[ -n "$MIC_SOURCE" ]]; then
+  echo -e "${GREEN}[OK]${NC} Sound_Blaster microphone found: ${MIC_SOURCE}"
 else
-        echo "[WARN] ***ttyDYNAMIXEL  IS NOT FOUND***"
+  echo -e "${RED}[NG]${NC} Sound_Blaster microphone not found"
 fi
 
-CMD1=`ls /dev/ttyPACECAT*`
-if [ "${CMD1}" != "" ];then
-        echo "[INFO] ${CMD1} :[OK]"
+# ----------------------------
+# Check speaker sink
+# ----------------------------
+SPEAKER_SINK=$(pactl list short sinks \
+  | grep -i "Sound_Blaster" \
+  | awk '{print $2}' \
+  | head -n 1)
+
+if [[ -n "$SPEAKER_SINK" ]]; then
+  echo -e "${GREEN}[OK]${NC} Sound_Blaster speaker found: ${SPEAKER_SINK}"
 else
-        echo "[WARN] ***ttyPACECAT_2.4.3  IS NOT FOUND***"
+  echo -e "${RED}[NG]${NC} Sound_Blaster speaker not found"
 fi
 
+echo ""
+echo "=== LiDAR Data Check ==="
 
-echo "[INFO] UDEV CHECK FINISH"
-echo "---------------------------------"
+if [[ -e "$LIDAR_DEV" ]]; then
+  BYTE_COUNT=$(timeout ${LIDAR_TIMEOUT} cat "$LIDAR_DEV" 2>/dev/null | head -c 256 | wc -c)
 
+  if [[ "$BYTE_COUNT" -gt 0 ]]; then
+    echo -e "${GREEN}[OK]${NC} LiDAR is sending data (${BYTE_COUNT} bytes received)"
+  else
+    echo -e "${RED}[NG]${NC} LiDAR device found but no data received"
+  fi
+else
+  echo -e "${RED}[NG]${NC} LiDAR device not found: ${LIDAR_DEV}"
+fi
+
+echo ""
+echo "=== IMU Data Check ==="
+
+
+if [[ -e "$IMU_DEV" ]]; then
+  BYTE_COUNT=$(timeout ${IMU_TIMEOUT} cat "$IMU_DEV" 2>/dev/null | head -c 256 | wc -c)
+
+  if [[ "$BYTE_COUNT" -gt 0 ]]; then
+    echo -e "${GREEN}[OK]${NC} IMU is sending data (${BYTE_COUNT} bytes received)"
+  else
+    echo -e "${RED}[NG]${NC} IMU device found but no data received"
+  fi
+else
+  echo -e "${RED}[NG]${NC} IMU device not found: ${IMU_DEV}"
+fi
+
+echo ""
+echo "=== RealSense Check ==="
+
+# Check if any Intel RealSense device is connected via USB
+if lsusb | grep -qi "Intel.*RealSense"; then
+  REALSENSE_LINE=$(lsusb | grep -i "Intel.*RealSense" | head -n 1)
+  echo -e "${GREEN}[OK]${NC} RealSense device detected: ${REALSENSE_LINE}"
+else
+  echo -e "${RED}[NG]${NC} No Intel RealSense device detected"
+fi
+
+echo ""
+echo "=== Bluetooth Controller Check ==="
+
+# Check if bluetoothctl command exists
+if ! command -v bluetoothctl &>/dev/null; then
+  echo -e "${RED}[NG]${NC} bluetoothctl not found"
+else
+  # Get connected Bluetooth devices
+  CONNECTED_BT_DEVICES=$(bluetoothctl info | grep "Connected: yes" -B 1)
+
+  if [[ -z "$CONNECTED_BT_DEVICES" ]]; then
+    echo -e "${RED}[NG]${NC} No Bluetooth devices connected"
+  else
+    # Try to find a controller-like device name
+    CONTROLLER_DEVICE=$(echo "$CONNECTED_BT_DEVICES" | grep -Ei \
+      "controller|gamepad|joystick|joy|xbox|dualshock|dualsense|wireless controller" \
+      | head -n 1)
+
+    if [[ -n "$CONTROLLER_DEVICE" ]]; then
+      echo -e "${GREEN}[OK]${NC} Bluetooth controller connected:"
+      echo "     ${CONTROLLER_DEVICE}"
+    else
+      echo -e "${RED}[NG]${NC} Bluetooth device connected, but no controller detected"
+    fi
+  fi
+fi
