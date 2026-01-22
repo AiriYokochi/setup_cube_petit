@@ -65,5 +65,5 @@ source /opt/ros/jazzy/setup.bash
 rosdep install --from-path . --ignore-src -r -y
 source ~/work/setup_cube_petit/submodule_recursive.bash
 cd ~/ros
-colcon build --symlink-install
+colcon build --symlink-install --parallel-workers 2
 echo "Please reboot to apply group changes (dialout/video)."
