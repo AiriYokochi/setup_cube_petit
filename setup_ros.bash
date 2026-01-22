@@ -53,7 +53,8 @@ echo -e '\e[1;31m == Install uv == \e[m'
 curl -Ls https://astral.sh/uv/install.sh | bash
 echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
 echo "export ROS_DOMAIN_ID=94" >> ~/.bashrc
-source ~/.bashrc
+export PATH="$HOME/.cargo/bin:$PATH"
+source /opt/ros/jazzy/setup.bash
 
 # Install cube_petit_ros
 echo -e '\e[1;31m == Install cube_petit_ros == \e[m'
@@ -62,7 +63,7 @@ git clone https://github.com/sbgisen/cube_petit_ros.git -b feature/jazzy_devel
 vcs import . < ./cube_petit_ros/cube_petit_ros.repos
 source /opt/ros/jazzy/setup.bash
 rosdep install --from-path . --ignore-src -r -y
-
+source ~/work/setup_cube_petit/submodule_recursive.bash
 cd ~/ros
 colcon build --symlink-install
 echo "Please reboot to apply group changes (dialout/video)."
