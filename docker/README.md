@@ -127,6 +127,23 @@ cube_petit_ros等の各リポジトリで使う場合は、`.devcontainer/` を�
 これらを使いたい場合は、コンテナ内で対象の `COLCON_IGNORE`/`AMENT_IGNORE` を消して
 `rosdep install` → `colcon build --packages-select <パッケージ名>` してください(時間とディスクを消費します)。
 
+## ビルドの保証範囲(必須パッケージとBUILD_REPORT.txt)
+
+イメージのビルドは `colcon build --continue-on-error` で全パッケージを試したあと、
+[`required_packages.txt`](required_packages.txt) に列挙された**必須パッケージ**
+(cube_petit 3リポジトリの自前パッケージ+emcl2)がすべて揃っているかを
+[`check_required_build.sh`](check_required_build.sh) で検証します。
+
+- 必須パッケージが1つでも欠けていれば、イメージのビルド自体が失敗します(CIが赤くなる)
+- サードパーティのデバイスドライバ等がビルドできなかった場合は警告に留まり、
+  結果が **`/ws/BUILD_REPORT.txt`** に記録されてイメージに含まれます:
+
+```bash
+docker run --rm ghcr.io/sbgisen/cube_petit_dev:jazzy cat /ws/BUILD_REPORT.txt
+```
+
+除外パッケージを増減したときは `required_packages.txt` も合わせて更新してください。
+
 ## イメージのビルド(手元で)
 
 通常は不要です(GHCRからpullすればよい)。Dockerfileを変更するときなどに:

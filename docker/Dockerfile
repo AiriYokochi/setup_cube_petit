@@ -58,26 +58,37 @@ RUN for p in \
 
 # 依存パッケージのインストール(-r: 未解決キーはスキップ。setup_ros.bash / CIと同じ)
 # rviz2・teleop・cycloneddsは開発用に明示追加(実機はrmw_cyclonedds_cppで運用)
+# libqt5serialport5-dev: witmotion_IMU_ros(IMUドライバ)のpackage.xmlがランタイム版の
+# rosdepキー(libqt5-serialport)しか宣言していないため明示追加(上流バグの回避)
 # hadolint ignore=DL3008
 RUN echo -e "[install]\nbreak-system-packages = true" > /etc/pip.conf \
     && apt-get update \
     && rosdep update --rosdistro jazzy \
     && rosdep install -iry --from-paths /ws/src --rosdistro jazzy \
     && apt-get install -y --no-install-recommends \
+        libqt5serialport5-dev \
         ros-jazzy-rmw-cyclonedds-cpp \
         ros-jazzy-rviz2 \
         ros-jazzy-teleop-twist-keyboard \
     && rm -rf /var/lib/apt/lists/*
 
 # ワークスペースのビルド(build/logは削除してイメージを軽くする)
+# 方針: --continue-on-error で全パッケージのビルドを試み、その後
+# check_required_build.sh で「必須パッケージ(required_packages.txt)が全部揃っているか」を検証する。
+# 必須が欠けたらビルド失敗、任意パッケージ(サードパーティドライバ等)の失敗は
+# /ws/BUILD_REPORT.txt に記録するだけに留める(依存の抜け1つでイメージ全体が死ぬのを防ぐ)。
 # 注: pose_to_servo が servo_action への依存を package.xml に宣言していないため(上流の修正待ち)、
 # 先に servo_action をビルドして環境に載せてから全体をビルドする
 WORKDIR /ws
+COPY required_packages.txt /ws/required_packages.txt
+COPY check_required_build.sh /usr/local/bin/check_required_build.sh
 # hadolint ignore=SC1091
-RUN source /opt/ros/jazzy/setup.bash \
+RUN chmod +x /usr/local/bin/check_required_build.sh \
+    && source /opt/ros/jazzy/setup.bash \
     && colcon build --packages-select servo_action --cmake-args -DCMAKE_BUILD_TYPE=Release \
     && source /ws/install/setup.bash \
-    && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release \
+    && { colcon build --continue-on-error --cmake-args -DCMAKE_BUILD_TYPE=Release || true; } \
+    && check_required_build.sh \
     && rm -rf /ws/build /ws/log
 
 # 実機と同じ設定(ROS_DOMAIN_ID=94 / CycloneDDS)
