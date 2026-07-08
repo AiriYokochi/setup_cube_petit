@@ -7,9 +7,7 @@ This is setup script for Cube petit(Real robot) <br>
 - personal robot kit with **open-source software & hardware**
 - Easy Development Environment( Real robot or Simulator(Gazebo11) )
 - **SLAM & Navigation** as Basic Function
-- **Easy Talk, Auto Charging**, etc as Advanced Function (ROS1 avaiable)
-- [Youtube]()
-- [Twitter (~2023/03/31)]()
+- **Easy Talk, Auto Charging**, etc as Advanced Function (ROS1 available)
 
 **If you develop in a simulator environment(your PC), please see here**
 自分のPC上で動かす場合は本スクリプトは必要ありません<br>
@@ -47,7 +45,7 @@ This is setup script for Cube petit(Real robot) <br>
     1. `source setup_pc.bash` : Set Wallpaper, Install Chrome, Hide side bar, Set Power
     1. `source setup_dev_tools.sh` : (Option) Install gitKraken, VSCode
     1. `source setup_ros.bash` : Install ROS2 Jazzy and cube_petit_ros repository
-    1. `source setup_devices.bash` : Install IMU, Realsense[TODO]
+    1. `source setup_devices.bash` : Setup Wifi, Audio, IMU, CAN, Realsense
 
 
 ## Setup Script
@@ -63,16 +61,16 @@ This is setup script for Cube petit(Real robot) <br>
 
 ## Test
 1. Put PC inside the robot
-1. Connect **power**, , **2 USB** and **HDMI** connector
+1. Connect **power**, **2 USB** and **HDMI** connector
 1. **Power ON** PC and Cube petit's Face is displayed
 1. **Network** Setting
 1. **Speaker and Mic** Setting
 1. Check **USB recognized**
-    `ls /dev` -> result
+    `ls /dev` -> result should include (device names created by `udevs/*.rules`)
     ```
-    a
-    b
-    c
+    ttyWitMotion
+    ttyCANable
+    ttyLD06-19
     ``` 
 1. Check **Controller** is available
 1. Set **Auto Bring Up**

@@ -3,7 +3,7 @@ set -e
 
 cd
 
-# Install ROS Humble
+# Install ROS Jazzy
 echo -e '\e[1;31m == Install ROS2 Jazzy == \e[m'
 locale  # check for UTF-8
 
@@ -26,7 +26,7 @@ sudo apt install -y ros-jazzy-desktop python3-rosdep
 grep -qxF "source /opt/ros/jazzy/setup.bash" ~/.bashrc || echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 grep -qxF "source ~/ros/install/setup.bash" ~/.bashrc || echo "source ~/ros/install/setup.bash" >> ~/.bashrc
 
-echo -e '\e[1;31m == Set permssion to access == \e[m'
+echo -e '\e[1;31m == Set permission to access == \e[m'
 sudo usermod -a -G dialout $USER
 sudo usermod -a -G video $USER
 
@@ -51,9 +51,9 @@ grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' ~/.bashrc || echo 'export PATH=
 # Install uv
 echo -e '\e[1;31m == Install uv == \e[m'
 curl -Ls https://astral.sh/uv/install.sh | bash
-echo 'export PATH="$HOME/.cargo/bin:$PATH"' >> ~/.bashrc
-echo "export ROS_DOMAIN_ID=94" >> ~/.bashrc
-export PATH="$HOME/.cargo/bin:$PATH"
+# uv installs to ~/.local/bin, which is already added to PATH above
+grep -qxF "export ROS_DOMAIN_ID=94" ~/.bashrc || echo "export ROS_DOMAIN_ID=94" >> ~/.bashrc
+export PATH="$HOME/.local/bin:$PATH"
 source /opt/ros/jazzy/setup.bash
 
 # Install cube_petit_ros

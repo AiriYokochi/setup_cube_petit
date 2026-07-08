@@ -29,13 +29,13 @@ cd ~/work/setup_cube_petit
 echo -e '\e[1;31m == Setup Udev rules == \e[m'
 sudo cp udevs/* /etc/udev/rules.d/
 cp -r shell_scripts ~/
-echo '[[ $- == *i* ]] && echo "Running udev_check.sh..." && ~/shell_scripts/udev_check.sh' >> ~/.bashrc
+grep -qxF '[[ $- == *i* ]] && echo "Running udev_check.sh..." && ~/shell_scripts/udev_check.sh' ~/.bashrc || echo '[[ $- == *i* ]] && echo "Running udev_check.sh..." && ~/shell_scripts/udev_check.sh' >> ~/.bashrc
 
-echo "alias psgrepkill=\"bash ~/shell_scripts/ps_grep_kill.sh \$@\"" >> ~/.bashrc
+grep -qxF "alias psgrepkill=\"bash ~/shell_scripts/ps_grep_kill.sh \$@\"" ~/.bashrc || echo "alias psgrepkill=\"bash ~/shell_scripts/ps_grep_kill.sh \$@\"" >> ~/.bashrc
 cd
-echo "export PS1=\"\n\"\$PS1" >> ~/.bashrc
-echo "export DISPLAY=:0.0" >> ~/.bashrc
-echo "export LIBGL_ALWAYS_SOFTWARE=1" >> ~/.bashrc
+grep -qxF "export PS1=\"\n\"\$PS1" ~/.bashrc || echo "export PS1=\"\n\"\$PS1" >> ~/.bashrc
+grep -qxF "export DISPLAY=:0.0" ~/.bashrc || echo "export DISPLAY=:0.0" >> ~/.bashrc
+grep -qxF "export LIBGL_ALWAYS_SOFTWARE=1" ~/.bashrc || echo "export LIBGL_ALWAYS_SOFTWARE=1" >> ~/.bashrc
 
 
 # blanc screen off
