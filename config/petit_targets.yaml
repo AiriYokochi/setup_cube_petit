@@ -1,0 +1,47 @@
+# petit が起動できるターゲットの定義
+#
+# - command: tmuxウィンドウ内で実行するコマンド(ROS環境source済みで実行される)
+# - marker:  そのlaunchが起動中かを判定するノード名(ros2 node list への部分一致)
+# - description: `petit targets` で表示する説明
+#
+# ターゲット名・command・marker は cube_petit_web_interface の api_server.py
+# (LAUNCH_COMMANDS / LAUNCH_NODE_MARKERS)と揃えている。
+# TODO(backlog): 将来的にはこのyamlを唯一の定義元にして api_server.py 側から
+# 読み込むようにする(今はコピーなので、変更時は両方を更新すること)。
+
+# `petit up`(引数なし)で起動するターゲット。
+# 意図的に bringup だけにしている: demo(音声会話)やカメラ系は
+# スピーカーから音が出る等の副作用があるため、明示指定でのみ起動する。
+default_set:
+  - bringup
+
+targets:
+  bringup:
+    description: ロボット本体の起動(モータ・センサ・URDF)。まずはこれ
+    command: ros2 launch cube_petit_bringup cube_petit_bringup.launch.py
+    marker: robot_state_publisher
+
+  rosbridge:
+    description: Webインターフェース用のrosbridge(WebSocket, port 9090)
+    command: ros2 launch rosbridge_server rosbridge_websocket_launch.xml
+    marker: rosbridge_websocket
+
+  navigation:
+    description: 自律移動(emcl自己位置推定 + Nav2)。要bringup・作成済み地図
+    command: ros2 launch cube_petit_navigation navigation_orange.launch.py
+    marker: emcl
+
+  create_map:
+    description: 地図作成(slam_toolbox)。要bringup。navigationとは同時に使えない
+    command: ros2 launch cube_petit_navigation create_map_orange.launch.py
+    marker: slam_toolbox
+
+  anima:
+    description: 感情・行動システム(sensor_influence→internal_state→behavior)
+    command: ros2 launch cube_petit_anima anima.launch.py
+    marker: behavior_node
+
+  demo:
+    description: 音声会話デモ(Realtime GPT)。スピーカーから音が出るので注意
+    command: ros2 launch cube_petit_scenario cube_petit_talk_demo.launch.py
+    marker: realtime_gpt_chat
