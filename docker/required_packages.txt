@@ -1,0 +1,40 @@
+# 開発イメージの必須パッケージ一覧(1行1パッケージ、#はコメント)
+# ここに書かれたパッケージが1つでもビルドされていなければ、イメージのビルドは失敗する。
+# 除外パッケージ(COLCON_IGNORE)を増減したときはこのリストも更新すること。
+#
+# 方針: cube_petit 3リポジトリの自前パッケージ全部(除外分を除く)+ 鍵となる依存(emcl2)。
+# サードパーティのデバイスドライバ等はここに載せない(失敗しても警告のみ →
+# /ws/BUILD_REPORT.txt に記録される)。
+
+# --- cube_petit_ros ---
+cube_petit_bringup
+cube_petit_description
+cube_petit_diagnostics
+cube_petit_facial_animation
+cube_petit_facial_animation_msgs
+cube_petit_gazebo
+cube_petit_hardware_interface
+cube_petit_navigation
+cube_petit_navigation_msgs
+cube_petit_python_api
+cube_petit_ros
+cube_petit_speech_msgs
+
+# --- cube_petit_interaction ---
+cube_petit_behavior
+cube_petit_chat_msgs
+cube_petit_interaction
+cube_petit_interaction_msgs
+cube_petit_lifestate
+memory_person
+
+# --- cube_petit_scenario ---
+cube_petit_anima
+cube_petit_scenario
+cube_petit_scenario_msgs
+pose_to_servo
+servo_action
+servo_autonomous
+
+# --- 鍵となる依存(ナビゲーション: 自己位置推定) ---
+emcl2
