@@ -103,12 +103,19 @@ cube_petit_ros等の各リポジトリで使う場合は、`.devcontainer/` を�
 
 ## イメージに含まれないもの(除外パッケージ)
 
-以下のパッケージは、ビルド時に `uv` で独自のPython venv(TensorFlow等を含む、数GB規模)を作るため、
-イメージサイズを抑える目的で `COLCON_IGNORE` により除外しています。
+以下のパッケージは `COLCON_IGNORE` により除外しています。
 ナビゲーション・シミュレーション・コア機能の開発には影響しません。
+
+除外理由は2種類あります:
+
+- **venv**: ビルド時に `uv` で独自のPython venv(TensorFlow等を含む、数GB規模)を作るため、
+  イメージサイズを抑える目的で除外
+- **udev**: setup.py がビルド時に `sudo udevadm` を実行するため、コンテナ内ではビルド不可
+  (実機のデバイスセットアップ用。コンテナでは不要)
 
 | パッケージ | リポジトリ | 主な内容 |
 | --- | --- | --- |
+| `depthai_hand_tracker` | depthai_hand_tracker(.repos経由) | ハンドトラッキング(udev) |
 | `cube_petit_speech_to_text` | cube_petit_ros | 音声認識(venv + Julius) |
 | `cube_petit_text_to_speech` | cube_petit_ros | 音声合成(venv) |
 | `cube_petit_chat` | cube_petit_interaction | LLM会話(venv) |
