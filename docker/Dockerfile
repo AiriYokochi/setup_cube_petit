@@ -39,9 +39,12 @@ RUN echo "workspace snapshot: ${WORKSPACE_SNAPSHOT}" \
     && files=$(find . -type f -regextype posix-egrep -regex "\./.+\.(rosinstall|repos)" | sort) \
     && for f in ${files}; do rv import -r -s -i "${f}"; done
 
-# ビルド時にuvで独自venvを作る重量級パッケージ(TensorFlow等で数GB増える)は除外する。
+# コンテナ内でビルドできない・不適なパッケージを除外する。
+# - uvで独自venvを作る重量級パッケージ(TensorFlow等で数GB増える)
+# - depthai_hand_tracker: setup.pyがビルド時に sudo udevadm を実行するためコンテナ内で失敗する
 # 除外理由と一覧は docker/README.md を参照。AMENT_IGNOREはrosdepにも無視させるため。
 RUN for p in \
+        depthai_hand_tracker \
         cube_petit_ros/cube_petit_speech_to_text \
         cube_petit_ros/cube_petit_text_to_speech \
         cube_petit_interaction/cube_petit_chat \
