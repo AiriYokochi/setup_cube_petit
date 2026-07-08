@@ -1,4 +1,4 @@
-# setup_cube_petit
+# cube_petit_setup
 
 This is setup script for Cube petit(Real robot) <br>
 キューブプチ(ロボット実機)のPCをセットアップするスクリプトです
@@ -36,8 +36,8 @@ This is setup script for Cube petit(Real robot) <br>
 3. Git clone this repo
     ```
     mkdir -p ~/work && cd ~/work/
-    git clone https://github.com/AiriYokochi/setup_cube_petit.git -b feature/ros2_jazzy
-    cd setup_cube_petit
+    git clone https://github.com/sbgisen/cube_petit_setup.git -b feature/ros2_jazzy
+    cd cube_petit_setup
     ```
 
 4. Run setup Script
