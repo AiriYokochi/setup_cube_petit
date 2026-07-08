@@ -59,7 +59,7 @@ source /opt/ros/jazzy/setup.bash
 # Install cube_petit_ros
 echo -e '\e[1;31m == Install cube_petit_ros == \e[m'
 cd ~/ros/src/
-git clone https://github.com/sbgisen/cube_petit_ros.git -b feature/jazzy_devel
+git clone https://github.com/sbgisen/cube_petit_ros.git -b jazzy-devel
 vcs import . < ./cube_petit_ros/cube_petit_ros.repos
 source /opt/ros/jazzy/setup.bash
 rosdep install --from-path . --ignore-src -r -y
