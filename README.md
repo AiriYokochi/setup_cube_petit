@@ -4,7 +4,7 @@ English version → [README_EN.md](README_EN.md)
 
 キューブプチ(ロボット実機)のPCをセットアップするスクリプト集です。
 
-> 自分のPC(シミュレータ環境)で動かしたいだけの場合、このスクリプトは不要です。[cube_petit_ros](https://github.com/sbgisen/cube_petit_ros) を直接クローンしてください。
+> 自分のPC(シミュレータ環境)で動かしたいだけの場合、このスクリプトは不要です。[cube_petit_ros](https://github.com/sbgisen/cube_petit_ros) を直接クローンするか、[Docker開発環境](docker/README.md)(ビルド済みワークスペース入りイメージを `docker pull` するだけ)を使ってください。
 
 ## 3ステップでセットアップ
 
@@ -64,6 +64,17 @@ source setup_devices.bash
     ```
 7. **コントローラ**が使えることを確認する
 8. **自動起動**を設定する
+
+## Docker開発環境(実機なしで開発する)
+
+実機がなくても、ビルド済みワークスペース入りのDockerイメージで開発・シミュレーションができます。
+
+```bash
+docker pull ghcr.io/sbgisen/cube_petit_dev:jazzy
+```
+
+イメージは `jazzy-devel` へのpushと週次スケジュールでGitHub Actionsが自動ビルドします。
+使い方(Gazeboシミュレーション・ソースのマウント・VSCode devcontainer)は [docker/README.md](docker/README.md) を参照してください。
 
 ## PRを実機でテストする(petit-test)
 

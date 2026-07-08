@@ -1,0 +1,26 @@
+{
+    "name": "cube_petit_dev",
+    "image": "ghcr.io/sbgisen/cube_petit_dev:jazzy",
+    "runArgs": [
+        "--net=host",
+        "--ipc=host"
+    ],
+    "containerEnv": {
+        "DISPLAY": "${localEnv:DISPLAY}",
+        "QT_X11_NO_MITSHM": "1"
+    },
+    "mounts": [
+        "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind"
+    ],
+    "workspaceMount": "source=${localWorkspaceFolder},target=/ws/src/${localWorkspaceFolderBasename},type=bind",
+    "workspaceFolder": "/ws/src/${localWorkspaceFolderBasename}",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-vscode.cpptools",
+                "ms-iot.vscode-ros"
+            ]
+        }
+    }
+}
