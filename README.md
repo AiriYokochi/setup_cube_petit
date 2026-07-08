@@ -65,6 +65,50 @@ source setup_devices.bash
 7. **コントローラ**が使えることを確認する
 8. **自動起動**を設定する
 
+## PRを実機でテストする(petit-test)
+
+GitHubのPRを実機でサクッと試すためのヘルパースクリプト。
+`petit-test <repo> <PR番号>` の一発で、PRのコード取得 → 依存解決 → ビルド → tmux起動までやる。
+
+### インストール
+
+```bash
+sudo ln -s "$(pwd)/bin/petit-test" /usr/local/bin/petit-test
+# もしくはPATHに bin/ を追加
+```
+
+### 使い方
+
+```bash
+petit-test cube_petit_scenario 4    # sbgisen/cube_petit_scenario のPR #4 をテスト
+petit-test clean                    # 後片付け(tmux終了・~/ros_test削除)
+```
+
+### やること
+
+1. `gh` でPRのブランチを解決し、`~/ros/src/<repo>` に fetch
+2. `~/ros_test/src/<repo>` にPRブランチの **git worktree**(detached)を作成/更新
+3. `rosdep install` で依存を解決(失敗しても続行)
+4. PRで変更されたパッケージだけを `colcon build --symlink-install --packages-up-to` でビルド
+   (underlayとして `~/ros/install` をsource)
+5. PR本文の「実機確認」セクション(なければ本文全体)を表示
+6. tmuxセッション `petit-test` を3ペインで起動
+   - **PRサマリ**: タイトル・URL・実機確認チェックリスト
+   - **起動用**: `ros2 launch ...` を打つ用
+   - **確認用**: `ros2 topic list` / `echo` を打つ用
+   - 各ペインは underlay(`~/ros/install`)+ overlay(`~/ros_test/install`)がsource済み、
+     `ROS_DOMAIN_ID=94` / `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` 設定済み
+
+同じコマンドの再実行はブランチ更新+差分リビルドだけ行う(冪等)。
+tmuxが無い環境では、手動実行用のコマンドを表示して終了する。
+
+### 安全性
+
+- 稼働中ワークスペース **`~/ros` のソース・installには手を入れない**
+  - `~/ros/src/<repo>` への書き込みは `git fetch` と worktree のメタデータ(`.git/worktrees/`)のみで、作業ツリー・checkout状態は変わらない
+- PRのコードは `~/ros_test` に分離してビルドし、`petit-test clean` で完全に元に戻せる
+- worktreeはdetached checkoutなので、同じブランチが他でcheckout済みでも衝突しない
+
 ## 詳細
 
 ### Cube petitとは
