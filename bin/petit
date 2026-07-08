@@ -1,0 +1,265 @@
+#!/bin/bash
+# petit: ロボットを一発で起動・停止するランチャー(毎回 ros2 launch を打たなくてよくする)
+#
+# 使い方:
+#   petit up [target ...]     ターゲットを起動(引数なし=デフォルトセット。各targetはtmuxの1ウィンドウ)
+#   petit down [target ...]   停止(引数なし=セッションごと終了。Ctrl-C相当→猶予後にウィンドウ削除)
+#   petit status              各ターゲットの状態表(tmuxウィンドウ + ROSノードの有無)
+#   petit log <target>        そのターゲットのウィンドウを開く(非TTYなら直近の出力を表示)
+#   petit targets             起動できるターゲットの一覧と説明
+#
+# 例:
+#   petit up                  # デフォルトセット(bringup)を起動
+#   petit up navigation       # 自律移動を追加起動
+#   petit down navigation     # 自律移動だけ止める
+#
+# 安全性:
+#   - tmux外(systemd等)で同じノードが既に動いていたら二重起動せず拒否する
+#   - `petit up`(引数なし)はbringupのみ。音の出るdemo等は明示指定でのみ起動
+#
+# ターゲット定義: config/petit_targets.yaml(env PETIT_TARGETS で差し替え可)
+
+set -u
+
+LIVE_WS="$HOME/ros"
+SESSION="petit"
+ROBOT_NS="${PETIT_ROBOT_NS:-cube_petit_orange}"
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+CONFIG="${PETIT_TARGETS:-$SCRIPT_DIR/../config/petit_targets.yaml}"
+
+# tmuxの各ウィンドウで実行する環境セットアップ(petit-testと同じ流儀)
+SETUP_CMD="source $LIVE_WS/install/setup.bash; export ROS_DOMAIN_ID=94 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp PETIT_ROBOT_NS=$ROBOT_NS"
+
+info() { echo "[petit] $*"; }
+warn() { echo "[petit] WARN: $*" >&2; }
+die()  { echo "[petit] ERROR: $*" >&2; exit 1; }
+
+usage() {
+    sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+
+command -v tmux >/dev/null 2>&1 || die "tmuxが必要です(sudo apt install tmux)"
+command -v python3 >/dev/null 2>&1 || die "python3が必要です"
+[ -f "$CONFIG" ] || die "ターゲット定義が見つかりません: $CONFIG"
+[ -f "$LIVE_WS/install/setup.bash" ] || die "$LIVE_WS/install/setup.bash がありません(先にビルドしてください)"
+
+# ---------------------------------------------------------------- yaml読み込み
+# targets を「name<TAB>marker<TAB>command<TAB>description」の行に展開する
+yaml_targets() {
+    python3 -c '
+import sys, yaml
+d = yaml.safe_load(open(sys.argv[1]))
+for name, t in d["targets"].items():
+    print("\t".join([name, t["marker"], t["command"], t.get("description", "")]))
+' "$CONFIG" || die "yamlの読み込みに失敗しました: $CONFIG"
+}
+
+yaml_default_set() {
+    python3 -c '
+import sys, yaml
+print(" ".join(yaml.safe_load(open(sys.argv[1])).get("default_set", [])))
+' "$CONFIG"
+}
+
+TARGETS_TSV="$(yaml_targets)"
+[ -n "$TARGETS_TSV" ] || die "ターゲット定義が空です: $CONFIG"
+
+target_field() {  # target_field <name> <2=marker|3=command|4=description>
+    awk -F'\t' -v n="$1" -v f="$2" '$1==n{print $f; exit}' <<<"$TARGETS_TSV"
+}
+
+target_exists() {
+    [ -n "$(target_field "$1" 1)" ]
+}
+
+all_target_names() {
+    cut -f1 <<<"$TARGETS_TSV"
+}
+
+validate_targets() {
+    local t
+    for t in "$@"; do
+        target_exists "$t" || die "不明なターゲット: '$t'(petit targets で一覧を確認)"
+    done
+}
+
+# ---------------------------------------------------------------- tmux/ROSヘルパ
+# ウィンドウ名はtmuxの-t指定だと前方一致で誤爆するため、必ずwindow_idに解決して使う
+win_id() {
+    tmux list-windows -t "=$SESSION" -F '#{window_name} #{window_id}' 2>/dev/null \
+        | awk -v n="$1" '$1==n{print $2; exit}'
+}
+
+# 稼働中WSをsourceしてros2 node listを取る(失敗時は空=ノードなし扱い)
+ros_node_list() {
+    (
+        set +u  # ROSのsetup.bashはnounset非対応
+        # shellcheck disable=SC1091
+        source "$LIVE_WS/install/setup.bash" 2>/dev/null
+        export ROS_DOMAIN_ID=94 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+        timeout 15 ros2 node list 2>/dev/null
+    )
+}
+
+# ---------------------------------------------------------------- up
+do_up() {
+    local targets=("$@")
+    if [ ${#targets[@]} -eq 0 ]; then
+        read -r -a targets <<<"$(yaml_default_set)"
+        [ ${#targets[@]} -gt 0 ] || die "default_set が空です: $CONFIG"
+        info "デフォルトセットを起動します: ${targets[*]}"
+    fi
+    validate_targets "${targets[@]}"
+
+    info "ROSグラフを確認中(二重起動チェック)..."
+    local nodes
+    nodes="$(ros_node_list)"
+
+    local t wid marker cmd matched started=0
+    for t in "${targets[@]}"; do
+        wid="$(win_id "$t")"
+        if [ -n "$wid" ]; then
+            info "スキップ: '$t' は既にtmuxで起動中です(petit log $t で確認)"
+            continue
+        fi
+        marker="$(target_field "$t" 2)"
+        matched="$(grep -- "$marker" <<<"$nodes" || true)"
+        if [ -n "$matched" ]; then
+            warn "拒否: '$t' のノードがtmux外で既に動いています(systemd自動起動など)。二重起動しません:"
+            sed 's/^/  /' <<<"$matched" >&2
+            continue
+        fi
+        cmd="$(target_field "$t" 3)"
+        if ! tmux has-session -t "=$SESSION" 2>/dev/null; then
+            tmux new-session -d -s "$SESSION" -n "$t" -x 220 -y 50
+        else
+            tmux new-window -d -t "=$SESSION" -n "$t"
+        fi
+        wid="$(win_id "$t")"
+        [ -n "$wid" ] || die "tmuxウィンドウの作成に失敗しました: $t"
+        tmux send-keys -t "$wid" "$SETUP_CMD; clear; echo '# [petit] $t: $cmd'; $cmd" C-m
+        info "起動: $t ($cmd)"
+        started=$((started + 1))
+    done
+    [ "$started" -gt 0 ] && info "確認は: petit status / ログは: petit log <target>"
+    return 0
+}
+
+# ---------------------------------------------------------------- down
+# Ctrl-C相当(SIGINT)を送り、launchが終わるのを待ってからウィンドウを消す
+stop_window() {
+    local t="$1" wid cur i
+    wid="$(win_id "$t")"
+    if [ -z "$wid" ]; then
+        info "'$t' はtmuxで起動していません"
+        return 0
+    fi
+    tmux send-keys -t "$wid" C-c
+    info "停止中: $t (Ctrl-C送信、最大20秒待ちます)"
+    for i in $(seq 1 20); do
+        cur="$(tmux display-message -p -t "$wid" '#{pane_current_command}' 2>/dev/null)" || break
+        [ "$cur" = "bash" ] && break
+        sleep 1
+    done
+    if [ "${cur:-bash}" != "bash" ]; then
+        warn "'$t' が20秒で終了しませんでした。ウィンドウを強制削除します"
+    fi
+    tmux kill-window -t "$wid" 2>/dev/null
+    info "停止: $t"
+}
+
+do_down() {
+    if [ $# -gt 0 ]; then
+        validate_targets "$@"
+        local t
+        for t in "$@"; do
+            stop_window "$t"
+        done
+        # 全ウィンドウを消したらセッションも自然に消える(tmuxの仕様)
+        return 0
+    fi
+
+    tmux has-session -t "=$SESSION" 2>/dev/null || { info "tmuxセッション '$SESSION' はありません(起動していません)"; return 0; }
+    local wins
+    wins="$(tmux list-windows -t "=$SESSION" -F '#{window_name}' 2>/dev/null)"
+    if [ -t 0 ]; then
+        echo "[petit] 以下を全部停止します: $(tr '\n' ' ' <<<"$wins")"
+        read -r -p "[petit] よろしいですか? [y/N] " ans
+        case "$ans" in [yY]*) ;; *) info "中止しました"; return 0 ;; esac
+    else
+        info "非対話実行のため確認なしで全停止します: $(tr '\n' ' ' <<<"$wins")"
+    fi
+    local t
+    while IFS= read -r t; do
+        [ -n "$t" ] && stop_window "$t"
+    done <<<"$wins"
+    tmux kill-session -t "=$SESSION" 2>/dev/null
+    info "tmuxセッション '$SESSION' を終了しました"
+}
+
+# ---------------------------------------------------------------- status
+do_status() {
+    info "ROSグラフを確認中..."
+    local nodes
+    nodes="$(ros_node_list)"
+
+    printf '%-12s %-8s %-8s %s\n' "TARGET" "WINDOW" "NODE" "MARKER"
+    local t marker w n
+    while IFS= read -r t; do
+        marker="$(target_field "$t" 2)"
+        if [ -n "$(win_id "$t")" ]; then w="✅"; else w="❌"; fi
+        if grep -q -- "$marker" <<<"$nodes"; then n="✅"; else n="❌"; fi
+        printf '%-12s %-8s %-8s %s\n' "$t" "$w" "$n" "$marker"
+    done < <(all_target_names)
+    echo
+    info "WINDOW=tmuxウィンドウの有無 / NODE=ros2 node list にmarkerがいるか"
+}
+
+# ---------------------------------------------------------------- log
+do_log() {
+    [ $# -eq 1 ] || die "使い方: petit log <target>"
+    validate_targets "$1"
+    local wid
+    wid="$(win_id "$1")"
+    [ -n "$wid" ] || die "'$1' はtmuxで起動していません(petit status で確認)"
+    if [ -n "${TMUX:-}" ]; then
+        tmux select-window -t "$wid"
+        exec tmux switch-client -t "=$SESSION"
+    elif [ -t 0 ]; then
+        tmux select-window -t "$wid"
+        exec tmux attach -t "=$SESSION"
+    else
+        info "非TTYのため直近の出力を表示します(リアルタイムは: tmux attach -t $SESSION)"
+        tmux capture-pane -p -t "$wid" -S -200
+    fi
+}
+
+# ---------------------------------------------------------------- targets
+do_targets() {
+    local defaults
+    defaults=" $(yaml_default_set) "
+    echo "起動できるターゲット(*はpetit upのデフォルト):"
+    local name marker cmd desc mark
+    while IFS=$'\t' read -r name marker cmd desc; do
+        mark=" "
+        case "$defaults" in *" $name "*) mark="*" ;; esac
+        printf ' %s %-12s %s\n' "$mark" "$name" "$desc"
+        printf '   %-12s └ %s\n' "" "$cmd"
+    done <<<"$TARGETS_TSV"
+}
+
+# ---------------------------------------------------------------- 引数処理
+[ $# -ge 1 ] || usage 1
+SUB="$1"
+shift
+case "$SUB" in
+    up)      do_up "$@" ;;
+    down)    do_down "$@" ;;
+    status)  do_status ;;
+    log)     do_log "$@" ;;
+    targets) do_targets ;;
+    -h|--help) usage 0 ;;
+    *) die "不明なサブコマンド: '$SUB'(petit --help で使い方を確認)" ;;
+esac

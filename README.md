@@ -76,6 +76,47 @@ docker pull ghcr.io/sbgisen/cube_petit_dev:jazzy
 イメージは `jazzy-devel` へのpushと週次スケジュールでGitHub Actionsが自動ビルドします。
 使い方(Gazeboシミュレーション・ソースのマウント・VSCode devcontainer)は [docker/README.md](docker/README.md) を参照してください。
 
+## ロボットを起動する(petit)
+
+毎回 `ros2 launch ...` を打ったり個人のaliasに頼ったりせず、覚えるコマンドは `petit` ひとつ。
+誰のPCでも同じ手順でロボットを起動できるランチャーです。
+
+### インストール
+
+```bash
+sudo ln -s "$(pwd)/bin/petit" /usr/local/bin/petit
+# もしくはPATHに bin/ を追加
+```
+
+### 使い方
+
+```bash
+petit up                # デフォルトセット(bringup)を起動
+petit up navigation     # ターゲットを追加起動(複数指定可)
+petit status            # 各ターゲットの状態表(tmuxウィンドウ + ROSノードの有無)
+petit log bringup       # そのターゲットのログを見る(tmuxウィンドウを開く)
+petit down navigation   # 1ターゲットだけ停止(Ctrl-C相当→猶予後にウィンドウ削除)
+petit down              # 確認のうえ全部停止
+petit targets           # 起動できるターゲットの一覧と説明
+```
+
+### しくみ
+
+- 各ターゲットはtmuxセッション `petit` の1ウィンドウとして起動する
+  (ROS環境source済み・`ROS_DOMAIN_ID=94`・`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`)
+- ターゲット定義は [config/petit_targets.yaml](config/petit_targets.yaml)。
+  Webインターフェース(api_server.py)の起動ボタンと同じターゲット・コマンド・判定ノードを載せている
+  (将来的にはこのyamlを両者共通の定義元にする予定。今は変更時に両方を更新すること)
+- ロボットの名前空間は環境変数 `PETIT_ROBOT_NS`(デフォルト `cube_petit_orange`)
+
+### 安全性
+
+- `petit up`(引数なし)は **bringupだけ** を起動する。`demo`(音声会話)など
+  音が出る・APIを叩くターゲットは明示指定でのみ起動
+- 同じターゲットのノードがtmux外(systemd自動起動など)で既に動いていたら、
+  二重起動せずに動いているノード名を表示して拒否する
+- 停止はCtrl-C相当(SIGINT)を送ってlaunchの終了を待ってからウィンドウを消す
+
 ## PRを実機でテストする(petit-test)
 
 GitHubのPRを実機でサクッと試すためのヘルパースクリプト。
