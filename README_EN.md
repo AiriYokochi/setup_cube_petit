@@ -4,7 +4,7 @@
 
 Setup scripts for the Cube petit (real robot) PC.
 
-> If you only want to run Cube petit in a simulator on your own PC, you don't need this script. Clone [cube_petit_ros](https://github.com/sbgisen/cube_petit_ros) directly instead.
+> If you only want to run Cube petit in a simulator on your own PC, you don't need this script. Clone [cube_petit_ros](https://github.com/sbgisen/cube_petit_ros) directly, or use the [Docker development environment](docker/README.md) (just `docker pull` a prebuilt-workspace image).
 
 ## Setup in 3 steps
 
@@ -64,6 +64,17 @@ source setup_devices.bash
     ```
 7. Check the **controller** is available
 8. Set up **auto bring-up**
+
+## Docker development environment (develop without the robot)
+
+You can develop and run simulations without the physical robot using a Docker image that contains a prebuilt workspace.
+
+```bash
+docker pull ghcr.io/sbgisen/cube_petit_dev:jazzy
+```
+
+The image is built automatically by GitHub Actions on every push to `jazzy-devel` and on a weekly schedule.
+See [docker/README.md](docker/README.md) (Japanese) for usage: Gazebo simulation, mounting your own source, and the VSCode devcontainer.
 
 ## Details
 

@@ -1,0 +1,60 @@
+name: docker
+
+on:
+  push:
+    branches: [jazzy-devel]
+    paths:
+      - "docker/**"
+      - ".github/workflows/docker.yaml"
+  schedule:
+    # 毎週月曜 6:00 JST (日曜 21:00 UTC) — ワークスペースのスナップショットを最新に保つ
+    - cron: "0 21 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    name: Build and push image
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: Check out source repository
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set date tag
+        id: date
+        run: echo "date=$(date -u +%Y%m%d)" >> "${GITHUB_OUTPUT}"
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: docker
+          push: true
+          tags: |
+            ghcr.io/sbgisen/cube_petit_dev:jazzy
+            ghcr.io/sbgisen/cube_petit_dev:jazzy-${{ steps.date.outputs.date }}
+          build-args: |
+            WORKSPACE_SNAPSHOT=${{ steps.date.outputs.date }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test
+        run: |
+          docker run --rm ghcr.io/sbgisen/cube_petit_dev:jazzy \
+            bash -c "ros2 pkg list | grep -c cube_petit"
