@@ -1,0 +1,243 @@
+#!/bin/bash
+# petit-test: PRを実機でサクッとテストするためのヘルパー
+#
+# 使い方:
+#   petit-test <repo> <pr-number> [-f]   PRのコードを ~/ros_test にビルドしてtmuxを起動
+#   petit-test clean                     ~/ros_test とtmuxセッションを片付ける
+#
+# 例:
+#   petit-test cube_petit_scenario 4
+#
+# 安全性:
+#   - 稼働中ワークスペース ~/ros のソース・installには一切手を入れない
+#     (~/ros/src/<repo> へは git fetch と git worktree のメタデータ追加のみ)
+#   - PRのコードは ~/ros_test に別ワークスペース(オーバーレイ)としてビルドする
+
+set -u
+
+LIVE_WS="$HOME/ros"
+TEST_WS="$HOME/ros_test"
+ORG="sbgisen"
+SESSION="petit-test"
+ROS_DISTRO_NAME="jazzy"
+
+# tmuxの各ペインで実行する環境セットアップ
+SETUP_CMD="source $LIVE_WS/install/setup.bash; [ -f $TEST_WS/install/setup.bash ] && source $TEST_WS/install/setup.bash; export ROS_DOMAIN_ID=94 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp"
+
+info() { echo "[petit-test] $*"; }
+warn() { echo "[petit-test] WARN: $*" >&2; }
+die()  { echo "[petit-test] ERROR: $*" >&2; exit 1; }
+
+usage() {
+    sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+
+# ---------------------------------------------------------------- clean
+do_clean() {
+    if command -v tmux >/dev/null 2>&1; then
+        tmux kill-session -t "$SESSION" 2>/dev/null && info "tmuxセッション '$SESSION' を終了しました"
+    fi
+    if [ -d "$TEST_WS/src" ]; then
+        for wt in "$TEST_WS"/src/*/; do
+            [ -d "$wt" ] || continue
+            wt="${wt%/}"
+            # worktreeの親リポジトリ(~/ros/src/<repo>)を特定して正しく登録解除する
+            common_dir=$(git -C "$wt" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
+            if [ -n "$common_dir" ]; then
+                main_repo="${common_dir%/.git}"
+                if git -C "$main_repo" worktree remove --force "$wt" 2>/dev/null; then
+                    info "worktree削除: $wt (親: $main_repo)"
+                else
+                    warn "worktree削除に失敗: $wt (手動で: git -C $main_repo worktree remove --force $wt)"
+                fi
+                git -C "$main_repo" worktree prune 2>/dev/null
+            fi
+        done
+    fi
+    if [ -d "$TEST_WS" ]; then
+        rm -rf "$TEST_WS"
+        info "$TEST_WS を削除しました"
+    else
+        info "$TEST_WS はありません(削除済み)"
+    fi
+    exit 0
+}
+
+# ---------------------------------------------------------------- 引数処理
+[ $# -ge 1 ] || usage 1
+case "$1" in
+    clean) do_clean ;;
+    -h|--help) usage 0 ;;
+esac
+[ $# -ge 2 ] || usage 1
+
+REPO="$1"
+PR="$2"
+FORCE=0
+[ "${3:-}" = "-f" ] && FORCE=1
+
+REPO_DIR="$HOME/ros/src/$REPO"
+[ -d "$REPO_DIR/.git" ] || die "$REPO_DIR がgitリポジトリではありません(repo名を確認してください)"
+case "$PR" in (*[!0-9]*|'') die "PR番号は数字で指定してください: '$PR'";; esac
+command -v gh >/dev/null 2>&1 || die "gh CLIが必要です"
+[ -f "$LIVE_WS/install/setup.bash" ] || die "$LIVE_WS/install/setup.bash がありません"
+
+# ---------------------------------------------------------------- 1. PR情報の取得
+info "PR情報を取得中: $ORG/$REPO#$PR"
+PR_JSON=$(gh pr view "$PR" --repo "$ORG/$REPO" --json title,url,body,headRefName,baseRefName) \
+    || die "PR #$PR が見つかりません($ORG/$REPO)"
+PR_TITLE=$(jq -r .title <<<"$PR_JSON")
+PR_URL=$(jq -r .url <<<"$PR_JSON")
+PR_HEAD=$(jq -r .headRefName <<<"$PR_JSON")
+PR_BASE=$(jq -r .baseRefName <<<"$PR_JSON")
+info "「$PR_TITLE」 ($PR_BASE <- $PR_HEAD)"
+info "$PR_URL"
+
+# ---------------------------------------------------------------- 2. fetch + worktree
+# ~/ros/src/<repo> への書き込みは fetch と worktree メタデータのみ(作業ツリーは触らない)
+info "fetch: origin/$PR_HEAD, origin/$PR_BASE"
+git -C "$REPO_DIR" fetch -q origin "$PR_BASE" || warn "ベースブランチのfetchに失敗(差分検出が不正確になる可能性)"
+if git -C "$REPO_DIR" fetch -q origin "$PR_HEAD" 2>/dev/null; then
+    PR_REF="origin/$PR_HEAD"
+else
+    # フォークからのPRなどブランチ名でfetchできない場合はGitHubのPR refを使う
+    git -C "$REPO_DIR" fetch -q origin "refs/pull/$PR/head" || die "PRのfetchに失敗しました"
+    # FETCH_HEADはworktree間で共有されないためSHAに解決しておく
+    PR_REF=$(git -C "$REPO_DIR" rev-parse FETCH_HEAD)
+fi
+
+WT_DIR="$TEST_WS/src/$REPO"
+mkdir -p "$TEST_WS/src"
+git -C "$REPO_DIR" worktree prune 2>/dev/null
+
+if [ -d "$WT_DIR" ] && git -C "$WT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+    # 既存worktreeを更新(detachedなのでブランチ重複チェックアウト問題は起きない)
+    info "既存worktreeを更新: $WT_DIR -> $PR_REF"
+    git -C "$WT_DIR" checkout -q --detach "$PR_REF" || die "worktreeの更新に失敗しました"
+else
+    rm -rf "$WT_DIR"
+    info "worktreeを作成: $WT_DIR ($PR_REF)"
+    # detachedにすることで、~/ros/src側で同ブランチをcheckout中でも衝突しない
+    git -C "$REPO_DIR" worktree add -q --detach "$WT_DIR" "$PR_REF" || die "worktree追加に失敗しました"
+fi
+info "HEAD: $(git -C "$WT_DIR" log -1 --oneline)"
+
+# ---------------------------------------------------------------- 3. rosdep(ベストエフォート)
+info "rosdepで依存を確認中(失敗しても続行)"
+if ! rosdep install -iry --from-paths "$TEST_WS/src" --rosdistro "$ROS_DISTRO_NAME"; then
+    warn "rosdep installが失敗しました。依存不足でビルドが落ちる場合は手動で解決してください"
+fi
+
+# ---------------------------------------------------------------- 4. 変更パッケージの検出とビルド
+info "変更パッケージを検出中(origin/$PR_BASE との差分)"
+declare -A PKG_SET
+while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    d=$(dirname "$f")
+    while [ "$d" != "." ] && [ ! -f "$WT_DIR/$d/package.xml" ]; do
+        d=$(dirname "$d")
+    done
+    pkg_xml=""
+    if [ "$d" != "." ] && [ -f "$WT_DIR/$d/package.xml" ]; then
+        pkg_xml="$WT_DIR/$d/package.xml"
+    elif [ -f "$WT_DIR/package.xml" ]; then
+        pkg_xml="$WT_DIR/package.xml"
+    fi
+    if [ -n "$pkg_xml" ]; then
+        name=$(sed -n 's|.*<name>\(.*\)</name>.*|\1|p' "$pkg_xml" | head -1)
+        [ -n "$name" ] && PKG_SET["$name"]=1
+    fi
+done < <(git -C "$REPO_DIR" diff --name-only "origin/$PR_BASE...$PR_REF" 2>/dev/null)
+
+CHANGED_PKGS=("${!PKG_SET[@]}")
+if [ ${#CHANGED_PKGS[@]} -eq 0 ]; then
+    warn "変更されたROSパッケージが見つかりません(ドキュメントのみのPR?)。ビルドをスキップします"
+else
+    info "変更パッケージ: ${CHANGED_PKGS[*]}"
+    info "colcon build 開始(underlay: $LIVE_WS/install)"
+    if ! (
+        set +u  # ROSのsetup.bashはnounset非対応
+        cd "$TEST_WS" &&
+        # underlayだけをsourceしたクリーンな環境でビルドする
+        # shellcheck disable=SC1091
+        source "$LIVE_WS/install/setup.bash" &&
+        colcon build --symlink-install --packages-up-to "${CHANGED_PKGS[@]}"
+    ); then
+        echo >&2
+        die "ビルド失敗。ログ: $TEST_WS/log/latest_build/"
+    fi
+    info "ビルド成功"
+fi
+
+# ---------------------------------------------------------------- 5. PRサマリ(実機確認セクション)
+SUMMARY="$TEST_WS/pr_summary.md"
+{
+    echo "# $PR_TITLE"
+    echo
+    echo "$PR_URL   ($PR_BASE <- $PR_HEAD)"
+    echo
+    # 「実機確認」見出しがあればそのセクションだけ、なければ本文全体を載せる
+    body=$(jq -r .body <<<"$PR_JSON")
+    section=$(awk '/^#+.*実機確認/{flag=1; print; next} flag && /^#+ /{exit} flag' <<<"$body")
+    if [ -n "$section" ]; then
+        echo "$section"
+    else
+        echo "(「実機確認」見出しなし。PR本文全体を表示)"
+        echo
+        echo "$body"
+    fi
+} > "$SUMMARY"
+echo
+echo "==================== PRサマリ ===================="
+cat "$SUMMARY"
+echo "=================================================="
+echo
+
+# ---------------------------------------------------------------- 6. tmuxセッション
+if ! command -v tmux >/dev/null 2>&1; then
+    warn "tmuxが見つかりません。手動でターミナルを開いて以下を実行してください:"
+    echo "  $SETUP_CMD"
+    echo "  # 起動用: ros2 launch <package> <launch file>"
+    echo "  # 確認用: ros2 topic list / ros2 topic echo <topic>"
+    exit 0
+fi
+
+if tmux has-session -t "$SESSION" 2>/dev/null; then
+    if [ "$FORCE" -ne 1 ] && [ ! -t 0 ]; then
+        die "tmuxセッション '$SESSION' が既にあります。-f を付けて作り直すか、petit-test clean してください"
+    fi
+    if [ "$FORCE" -ne 1 ]; then
+        read -r -p "[petit-test] tmuxセッション '$SESSION' が既にあります。作り直しますか? [y/N] " ans
+        case "$ans" in [yY]*) ;; *) info "既存セッションにアタッチします"
+            if [ -n "${TMUX:-}" ]; then exec tmux switch-client -t "$SESSION"; else exec tmux attach -t "$SESSION"; fi ;;
+        esac
+    fi
+    tmux kill-session -t "$SESSION"
+fi
+
+# ペイン構成: 上=PRサマリ / 左下=起動用 / 右下=確認用
+# (ユーザ設定のbase-indexに依存しないようpane_idで扱う)
+P0=$(tmux new-session -d -s "$SESSION" -x 220 -y 50 -P -F '#{pane_id}')
+P1=$(tmux split-window -v -t "$P0" -P -F '#{pane_id}')
+P2=$(tmux split-window -h -t "$P1" -P -F '#{pane_id}')
+tmux set-option -w -t "$P0" pane-border-status top
+
+tmux select-pane -t "$P0" -T "PRサマリ"
+tmux send-keys -t "$P0" "$SETUP_CMD; clear; cat $SUMMARY" C-m
+
+tmux select-pane -t "$P1" -T "起動用"
+tmux send-keys -t "$P1" "$SETUP_CMD; clear; echo '# 起動用: 例) ros2 launch <package> <launch file>'" C-m
+
+tmux select-pane -t "$P2" -T "確認用"
+tmux send-keys -t "$P2" "$SETUP_CMD; clear; echo '# 確認用: 例) ros2 topic list / ros2 topic echo <topic>'" C-m
+
+tmux select-pane -t "$P1"
+info "tmuxセッション '$SESSION' を起動しました(片付けは: petit-test clean)"
+if [ -n "${TMUX:-}" ]; then
+    exec tmux switch-client -t "$SESSION"
+elif [ -t 0 ]; then
+    exec tmux attach -t "$SESSION"
+else
+    info "非対話実行のためアタッチしません。手動で: tmux attach -t $SESSION"
+fi
