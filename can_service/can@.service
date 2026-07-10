@@ -1,11 +1,21 @@
 [Unit]
 Description="Instance of slcand for can #%i"
+# Do not give up retrying restarts: without this, systemd stops
+# restarting the service after 5 failures within 10s (the default
+# StartLimitBurst/StartLimitIntervalSec), which would silently bring
+# us back to "service dead, nobody notices".
+StartLimitIntervalSec=0
 
 [Service]
 Type=Simple
 User=root
 ExecStart=/usr/local/bin/startCan.sh %i
 ExecStop=/usr/local/bin/stopCan.sh
+# startCan.sh now runs a health-check loop as its main process and
+# exits non-zero if slcand dies or can0 disappears. Restart=on-failure
+# makes systemd bring the whole slcand+can0 setup back automatically.
+Restart=on-failure
+RestartSec=2
 
 [Install]
 WantedBy=multi-user.target
