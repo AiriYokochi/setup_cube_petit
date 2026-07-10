@@ -7,7 +7,10 @@ Description="Instance of slcand for can #%i"
 StartLimitIntervalSec=0
 
 [Service]
-Type=Simple
+# Lowercase "simple" is required; systemd otherwise logs
+# "Failed to parse service type, ignoring: Simple" on every start
+# (harmless since it falls back to the simple default, but noisy).
+Type=simple
 User=root
 ExecStart=/usr/local/bin/startCan.sh %i
 ExecStop=/usr/local/bin/stopCan.sh
