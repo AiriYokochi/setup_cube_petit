@@ -63,7 +63,7 @@ git clone https://github.com/sbgisen/cube_petit_ros.git -b jazzy-devel
 vcs import . < ./cube_petit_ros/cube_petit_ros.repos
 source /opt/ros/jazzy/setup.bash
 rosdep install --from-path . --ignore-src -r -y
-source ~/work/setup_cube_petit/submodule_recursive.bash
+source ~/work/cube_petit_setup/submodule_recursive.bash
 cd ~/ros
 colcon build --symlink-install --parallel-workers 2
 echo "Please reboot to apply group changes (dialout/video)."

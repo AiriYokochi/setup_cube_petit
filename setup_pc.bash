@@ -25,7 +25,7 @@ rm ~/.local/share/keyrings/login.keyring
 
 echo -e '\e[1;31m == Setup Udev rules == \e[m'
 # Udevs
-cd ~/work/setup_cube_petit
+cd ~/work/cube_petit_setup
 echo -e '\e[1;31m == Setup Udev rules == \e[m'
 sudo cp udevs/* /etc/udev/rules.d/
 cp -r shell_scripts ~/
@@ -52,7 +52,7 @@ gsettings set org.gnome.shell.extensions.ding show-home false
 
 # Wall paper
 mkdir -p ~/Pictures/Wallpapers
-cp ~/work/setup_cube_petit/pictures/*.png ~/Pictures/Wallpapers
+cp ~/work/cube_petit_setup/pictures/*.png ~/Pictures/Wallpapers
 gsettings set org.gnome.desktop.background picture-uri "file://$HOME/Pictures/Wallpapers/happy.png"
 
 # Auto login

@@ -49,7 +49,7 @@ if confirm "Setup IMU (Witmotion udev + libqt5serialport)?"; then
   {
     echo -e '\e[1;32m == Setup IMU == \e[m'
     sudo apt install -y libqt5serialport5-dev
-    sudo cp ~/work/setup_cube_petit/udevs/99-imu-witmotion.rules /etc/udev/rules.d/
+    sudo cp ~/work/cube_petit_setup/udevs/99-imu-witmotion.rules /etc/udev/rules.d/
     sudo udevadm control --reload
     sudo udevadm trigger
   } || echo -e "\e[1;31m [FAILED] Setup IMU \e[m"
