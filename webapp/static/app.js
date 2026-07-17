@@ -260,7 +260,7 @@ function renderDetail(id) {
       const input = document.createElement("input");
       input.type = "text";
       input.placeholder = inputDef.placeholder || "";
-      input.value = savedInputs[inputDef.id] ?? "";
+      input.value = savedInputs[inputDef.id] ?? inputDef.default ?? "";
       row.appendChild(input);
       if (inputDef.help_ja) {
         const help = document.createElement("div");

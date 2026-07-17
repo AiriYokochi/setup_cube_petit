@@ -22,6 +22,7 @@ steps:
         label_ja: "個体名 (robot_namespace)"
         placeholder: "cube_petit_yellow"
         type: text
+        default: "cube_petit_"
         required: true
         pattern: "^cube_petit_[a-z0-9_]+$"
         help_ja: >-
