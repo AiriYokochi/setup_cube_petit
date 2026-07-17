@@ -80,7 +80,25 @@ function statusLabel(status, exitCode) {
   }
 }
 
+function updateProgress() {
+  const steps = state.data.steps;
+  const total = steps.length;
+  const finished = steps.filter((s) => ["done", "skipped"].includes(s.status)).length;
+  const running = steps.some((s) => s.status === "running");
+  const pct = total ? (finished / total) * 100 : 0;
+  // While a step runs, the petit runs ahead into that step's segment.
+  const petitPct = total ? ((finished + (running ? 0.5 : 0)) / total) * 100 : 0;
+
+  const wrap = document.getElementById("progress-wrap");
+  wrap.classList.toggle("running", running);
+  document.getElementById("progress-fill").style.width = pct + "%";
+  // Keep the petit visually on the track at both extremes.
+  document.getElementById("progress-petit").style.left = Math.min(97, Math.max(2, petitPct)) + "%";
+  document.getElementById("progress-text").textContent = `${finished} / ${total} ステップ`;
+}
+
 function renderStepList() {
+  updateProgress();
   const nav = document.getElementById("step-list");
   nav.innerHTML = "";
   state.data.steps.forEach((s, idx) => {
