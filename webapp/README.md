@@ -168,3 +168,9 @@ without executing any real setup commands (no sudo needed either). Every
 command is replaced by an echo+sleep simulation. See `/api/debug/mock/seed/*`
 and `/clear/*` above to exercise the "existing directory detected" branch of
 the ROS install step deterministically.
+
+## 言語切り替え / Language
+
+画面右上の「EN / 日本語」ボタンで表示言語を切り替えられます(選択はブラウザに保存され、
+初期値はブラウザの言語設定から自動判定)。The header button toggles the UI between
+Japanese and English; the choice is remembered in the browser.

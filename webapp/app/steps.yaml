@@ -5,14 +5,23 @@
 # require adding an entry here plus, if it's a genuinely new "type", a small
 # handler in engine.py -- the existing setup_pc.bash / setup_ros.bash /
 # setup_dev_tools.sh scripts are called as-is and are not reimplemented here.
+#
+# i18n: every user-facing "*_ja" key has an "*_en" sibling. The frontend picks
+# the one matching the selected language and falls back to _ja when _en is
+# missing (so forgetting a translation degrades gracefully, never blanks).
 
 steps:
   - id: prereq
     title_ja: "1. 前提確認"
+    title_en: "1. Preflight check"
     description_ja: |
       この機体のPCがセットアップ可能な状態か確認します。
       あわせて、この機体の名前(個体名)を入力してください。
       例: cube_petit_yellow のように、色や識別名を英数字とアンダースコアで入力します。
+    description_en: |
+      Checks that this robot's PC is ready to be set up.
+      Also enter this robot's name here.
+      Example: cube_petit_yellow — lowercase letters, digits and underscores.
     type: prereq_check
     needs_sudo: false
     skippable: false
@@ -20,6 +29,7 @@ steps:
     inputs:
       - id: robot_namespace
         label_ja: "個体名 (robot_namespace)"
+        label_en: "Robot name (robot_namespace)"
         placeholder: "cube_petit_yellow"
         type: text
         default: "cube_petit_"
@@ -29,17 +39,33 @@ steps:
           半角小文字・数字とアンダースコア(_)のみ、cube_petit_ で始めてください。
           ROSの決まりでハイフン(-)は使えません。PCのホスト名(例: cube-petit-yellow)は
           逆にハイフン区切りなので、綴りが違っていて正常です。
+        help_en: >-
+          Lowercase letters, digits and underscores (_) only, starting with
+          cube_petit_. ROS does not allow hyphens (-). The PC's hostname
+          (e.g. cube-petit-yellow) uses hyphens instead — the two spellings
+          are meant to differ.
         error_ja: >-
           個体名は cube_petit_yellow のように、半角小文字・数字とアンダースコア(_)だけで
           入力してください(ハイフン - や大文字は使えません)。
+        error_en: >-
+          Enter the robot name like cube_petit_yellow, using lowercase
+          letters, digits and underscores only (no hyphens or capitals).
 
   - id: pc_setup
     title_ja: "2. PC基本設定"
+    title_en: "2. Basic PC setup"
     description_ja: |
       日本語入力・Google Chrome・壁紙・電源設定・自動ログインなどをまとめて設定します
       (setup_pc.bash を実行します)。ネットワーク環境によっては5〜10分程度かかります。
+    description_en: |
+      Sets up Japanese input, Google Chrome, the wallpaper, power settings and
+      auto-login in one go (runs setup_pc.bash). Takes about 5-10 minutes
+      depending on your network.
     warning_ja: |
       自動ログインや画面まわりの設定は、最後のステップで再起動したときに反映されます。
+    warning_en: |
+      Auto-login and display settings take effect after the reboot in the
+      final steps.
     type: script
     script: setup_pc.bash
     needs_sudo: true
@@ -48,11 +74,17 @@ steps:
 
   - id: dev_tools
     title_ja: "3. 開発ツール(任意)"
+    title_en: "3. Developer tools (optional)"
     description_ja: |
       GitKraken(Git GUIツール)とVS Code(テキストエディタ)を導入するか選べます。
       開発者以外の方は、どちらもOFFのまま「実行」して進んでください。
       VS Codeを選ぶと、Cube Petit開発用のプロファイル(推奨拡張と設定一式)も
       あわせて自動で入ります。
+    description_en: |
+      Choose whether to install GitKraken (a Git GUI) and VS Code (a text
+      editor). If you are not a developer, just press "Run" with both OFF.
+      Picking VS Code also installs the Cube Petit development profile
+      (recommended extensions and settings) automatically.
     type: toggle_script
     script: setup_dev_tools.sh
     needs_sudo: true
@@ -61,6 +93,7 @@ steps:
     inputs:
       - id: install_gitkraken
         label_ja: "GitKraken (Git GUIツール) を導入する"
+        label_en: "Install GitKraken (Git GUI tool)"
         type: bool
         default: false
         # Command probed by /api/steps/dev_tools/installed: when present the
@@ -68,11 +101,13 @@ steps:
         detect_cmd: gitkraken
       - id: install_vscode
         label_ja: "VS Code (テキストエディタ) を導入する"
+        label_en: "Install VS Code (text editor)"
         type: bool
         default: false
         detect_cmd: code
       - id: install_anydesk
         label_ja: "AnyDesk (リモートサポート) を導入する"
+        label_en: "Install AnyDesk (remote support)"
         type: bool
         default: false
         detect_cmd: anydesk
@@ -80,12 +115,22 @@ steps:
           遠隔サポートを受ける予定がある場合だけONにしてください。
           サポート時は、画面に出る接続依頼をあなたが承認したときだけ相手に画面が見えます
           (無人アクセスのパスワードは設定しないでください)。反映には再起動が必要です。
+        help_en: >-
+          Turn this ON only if you plan to receive remote support. During
+          support, your screen is visible only while you approve the incoming
+          request on screen (do not set an unattended-access password).
+          A reboot is required before it works.
 
   - id: ros_setup
     title_ja: "4. ROS導入"
+    title_en: "4. Install ROS"
     description_ja: |
       ROS 2 JazzyとCube Petitのソフトウェア一式を導入します(setup_ros.bash を実行します)。
       ビルドに時間がかかります(目安15〜40分)。この間、画面を閉じずにお待ちください。
+    description_en: |
+      Installs ROS 2 Jazzy and the whole Cube Petit software stack (runs
+      setup_ros.bash). The build takes a while (roughly 15-40 minutes) —
+      please keep this screen open until it finishes.
     type: script_with_precheck
     script: setup_ros.bash
     needs_sudo: true
@@ -95,11 +140,17 @@ steps:
       message_ja: |
         ~/ros に以前の作業の跡(既存のROSワークスペースや、cube_petit_ros のソース一式など)
         が見つかりました。状況に応じて、下から選んでください。
+      message_en: |
+        Traces of previous work were found in ~/ros (an existing ROS
+        workspace, or a cube_petit_ros source tree). Pick the option below
+        that fits your situation.
       paths:
         - path: "ros/src/cube_petit_ros"
           label_ja: "ROSワークスペース内 cube_petit_ros"
+          label_en: "cube_petit_ros inside the ROS workspace"
         - path: "work/ripvcs"
           label_ja: "ripvcs (ビルド支援ツール)"
+          label_en: "ripvcs (build helper tool)"
       # skip / clean are always offered when the precheck fires. build_only /
       # separate_ws are added dynamically by engine.precheck_status() only
       # when they actually apply (source cloned but not built / ~/ros exists)
@@ -107,15 +158,23 @@ steps:
       choices:
         - id: skip
           label_ja: "このステップをスキップする(すでに導入済みとして次へ進む)"
+          label_en: "Skip this step (treat it as already installed)"
         - id: clean
           label_ja: "既存のフォルダを削除してやり直す"
+          label_en: "Delete the existing folders and start over"
 
   - id: reboot
     title_ja: "5. 再起動"
+    title_en: "5. Reboot"
     description_ja: |
       権限設定(dialout / video グループ)を反映するため、再起動が必要です。
       下のボタンを押したあと、この機体を再起動してください。
       再起動後、もう一度ターミナルで「./webapp/run.sh」を実行すると、続きから再開します。
+    description_en: |
+      A reboot is needed to apply the permission changes (dialout / video
+      groups). Press the button below, then reboot this robot.
+      After the reboot, run "./webapp/run.sh" in a terminal again — the
+      wizard resumes right where you left off.
     type: reboot_gate
     needs_sudo: false
     skippable: false
@@ -123,10 +182,16 @@ steps:
 
   - id: env_setup
     title_ja: "6. 環境設定"
+    title_en: "6. Environment setup"
     description_ja: |
       ROSの通信設定(ROS_DOMAIN_ID・RMW/CycloneDDS)と、よく使うコマンドのエイリアス
       (01_BRING など)を ~/.bashrc にまとめて書き込みます(setup_bashrc.bash を実行します)。
       あわせて、ROS 2通信(CycloneDDS)の推奨設定ファイルもこの機体に配布します。
+    description_en: |
+      Writes the ROS communication settings (ROS_DOMAIN_ID, RMW/CycloneDDS)
+      and handy command aliases (01_BRING etc.) into ~/.bashrc (runs
+      setup_bashrc.bash). Also installs the recommended CycloneDDS
+      configuration on this robot.
     type: script
     script: setup_bashrc.bash
     needs_sudo: true
@@ -135,6 +200,7 @@ steps:
     inputs:
       - id: ros_domain_id
         label_ja: "ROS_DOMAIN_ID"
+        label_en: "ROS_DOMAIN_ID"
         type: text
         # The static default is a fallback: /api/state overrides it with a
         # value derived from the robot name (see _suggested_domain_id in
@@ -146,20 +212,33 @@ steps:
         help_ja: >-
           同じ場所で複数台を動かすときは、個体ごとに違う番号にしてください
           (個体名から自動で提案しています)。
+        help_en: >-
+          When several robots run in the same place, give each one a
+          different number (this value is auto-suggested from the robot
+          name).
         error_ja: "ROS_DOMAIN_ID は0〜999の半角数字で入力してください。"
+        error_en: "ROS_DOMAIN_ID must be a number between 0 and 999."
       - id: openai_api_key
         label_ja: "OpenAI APIキー(任意)"
+        label_en: "OpenAI API key (optional)"
         type: text
         default: ""
         required: false
         help_ja: "AI会話機能に必要です。あとから ~/.bashrc でも設定できます。"
+        help_en: "Needed for the AI conversation features. You can also set it later in ~/.bashrc."
 
   - id: devices
     title_ja: "7. デバイス設定"
+    title_en: "7. Device setup"
     description_ja: |
       機体にUSB機器(IMU・CANケーブル・LiDAR・RealSense・SoundBlaster)を接続してから実行してください。
       それぞれの項目はON/OFFで選べます(setup_devices.bash を実行します)。
       RealSenseはソースからビルドするため、ONの場合は10分以上かかることがあります。
+    description_en: |
+      Connect the USB devices (IMU, CAN cable, LiDAR, RealSense,
+      SoundBlaster) to the robot first, then run this step. Each item can be
+      toggled ON/OFF (runs setup_devices.bash). RealSense is built from
+      source, so with it ON this can take 10+ minutes.
     type: toggle_script
     script: setup_devices.bash
     needs_sudo: true
@@ -168,27 +247,33 @@ steps:
     inputs:
       - id: wifi
         label_ja: "Wi-Fi優先設定"
+        label_en: "Wi-Fi priority settings"
         type: bool
         default: true
       - id: audio
         label_ja: "スピーカー(SoundBlaster)"
+        label_en: "Speaker (SoundBlaster)"
         type: bool
         default: true
       - id: imu
         label_ja: "IMU"
+        label_en: "IMU"
         type: bool
         default: true
       - id: can
         label_ja: "CAN(モーター通信)"
+        label_en: "CAN (motor communication)"
         type: bool
         default: true
       - id: realsense
         label_ja: "RealSense(カメラ、ビルドに10分以上)"
+        label_en: "RealSense (camera, 10+ min build)"
         type: bool
         default: true
 
   - id: bt_controller
     title_ja: "8. Bluetoothコントローラ接続"
+    title_en: "8. Bluetooth controller pairing"
     description_ja: |
       ロボットを操作するコントローラをBluetoothでペアリングします。
       コントローラをペアリングモードにしてください(ボタン長押し)。
@@ -197,6 +282,13 @@ steps:
       Tips: スキャン結果には「Wireless Controller」という名前で出てくることが
       多いです(PS系コントローラの標準名)。それらしい名前が見当たらないときは、
       まずこれを探してみてください。
+    description_en: |
+      Pairs the game controller that drives the robot over Bluetooth.
+      Put the controller into pairing mode (hold its pairing button), then
+      press "Scan" to list nearby Bluetooth devices. Press "Connect" on your
+      controller and pairing + connection happen automatically.
+      Tip: PlayStation-style controllers usually show up as
+      "Wireless Controller" — look for that name first.
     type: bluetooth
     needs_sudo: false
     skippable: true
@@ -204,6 +296,7 @@ steps:
 
   - id: claude_support
     title_ja: "9. Claude Codeコード支援(任意)"
+    title_en: "9. Claude Code assistant (optional)"
     description_ja: |
       AIによるコード支援環境(Claude Code)を導入します。
       Claude(Anthropic)の利用登録と課金が必要です。使わない場合はスキップしてください。
@@ -214,6 +307,16 @@ steps:
       この画面に表示されます。
       もう一度実行すると、作業フォルダの共通部分(ガイドやルール)が最新に
       更新されます(あなたの作業ログや記録は変更されません)。
+    description_en: |
+      Installs the AI coding assistant (Claude Code). This requires an
+      Anthropic account and a paid plan — skip this step if you won't use it.
+      Running it: 1) installs Claude Code, 2) creates this robot's own
+      Claude workspace (a home for worklogs, plans and memory, with
+      ready-made skills like issue/PR creation), 3) prepares an SSH key for
+      GitHub. When it finishes, the remaining steps (creating a GitHub
+      repository and registering the public key) appear on this screen.
+      Running it again refreshes the shared parts of the workspace (guides
+      and rules) — your own logs and records are never touched.
     type: script
     script: setup_claude_workspace.bash
     needs_sudo: false
@@ -228,24 +331,35 @@ steps:
     guide_links:
       about_claude:
         label_ja: "Claude Codeってなに?"
+        label_en: "What is Claude Code?"
         url: "https://code.claude.com/docs/ja/overview"
+        url_en: "https://code.claude.com/docs/en/overview"
       github_signup:
         label_ja: "GitHubアカウントを作る(持っていない場合)"
+        label_en: "Create a GitHub account (if you don't have one)"
         url: "https://github.com/signup"
       new_repo:
         label_ja: "リポジトリを作るページを開く"
+        label_en: "Open the new-repository page"
         url: "https://github.com/new"
       ssh_keys:
         label_ja: "公開鍵を登録するページを開く"
+        label_en: "Open the SSH-key registration page"
         url: "https://github.com/settings/ssh/new"
 
   - id: device_check
     title_ja: "10. センサ接続確認"
+    title_en: "10. Sensor connection check"
     description_ja: |
       IMU・CAN・LiDAR・Wi-Fi・SoundBlaster・RealSense・Bluetoothコントローラが
       正しく認識されているか、まとめて確認します(udev_check.sh を実行します)。
       NGの項目があっても、この画面から先に進めます。あとで機器を接続し直してから
       「もう一度チェック」を押せば再確認できます。
+    description_en: |
+      Checks in one go that the IMU, CAN, LiDAR, Wi-Fi, SoundBlaster,
+      RealSense and the Bluetooth controller are all recognized (runs
+      udev_check.sh). You can continue even if some items fail — reconnect
+      the device later and press "Check again" to re-verify.
     type: check
     script: shell_scripts/udev_check.sh
     needs_sudo: false
@@ -254,11 +368,18 @@ steps:
 
   - id: autostart
     title_ja: "11. 自動起動設定"
+    title_en: "11. Auto-start on power-on"
     description_ja: |
       電源を入れたら自動でロボットのソフトウェア(モーター・センサなどの起動一式)が
       立ち上がるように設定します(setup_autostart.bash を実行します)。
       ONのまま実行すると、次回のPC起動から有効になります(いまは起動しません)。
       あとで変えたくなったら、ON/OFFを切り替えてもう一度実行すれば反映されます。
+    description_en: |
+      Makes the robot's software stack (motors, sensors and friends) start
+      automatically when the PC powers on (runs setup_autostart.bash).
+      Run it with the toggle ON and it takes effect from the next boot
+      (nothing starts right now). To change your mind later, flip the
+      toggle and run this step again.
     type: script
     script: setup_autostart.bash
     needs_sudo: false
@@ -267,30 +388,40 @@ steps:
     inputs:
       - id: autostart_enabled
         label_ja: "電源を入れたら自動でロボットを起動する(bringup)"
+        label_en: "Start the robot automatically on power-on (bringup)"
         type: bool
         default: true
         help_ja: >-
           次回のPC起動から、モーター・センサが自動で立ち上がります。
           開発用の機体はOFF推奨です。
+        help_en: >-
+          From the next boot, motors and sensors come up by themselves.
+          OFF is recommended for development machines.
 
 # Shown once every step above is done/skipped, as a celebration screen with
 # "what do you want to do next" buttons. This is data (not code) on purpose,
 # so the labels/links can be edited later without touching app.js/main.py.
 completion:
   title_ja: "🎉 セットアップ完了です!"
+  title_en: "🎉 Setup complete!"
   subtitle_ja: "よきキューブプチライフを!"
+  subtitle_en: "Enjoy your life with Cube Petit!"
   next_actions:
     - id: try_it
       label_ja: "とりあえず動かしてみたい"
+      label_en: "I just want to try it out"
       # TODO: リンク先はありさんが確定する
       url: "https://sbgisen.github.io/cube_petit_portal/"
     - id: learn_ros
       label_ja: "ROSの勉強をしたい"
+      label_en: "I want to learn ROS"
       url: "https://docs.ros.org/en/jazzy/Tutorials.html"
     - id: learn_internals
       label_ja: "キューブプチの中身を知りたい"
+      label_en: "Show me how Cube Petit works inside"
       url: "https://github.com/sbgisen/cube_petit_ros"
     - id: consult
       label_ja: "何がしたいか相談したい"
+      label_en: "I'd like to talk about what to build"
       # TODO: リンク先はありさんが確定する
       url: "https://sbgisen.github.io/cube_petit_portal/"

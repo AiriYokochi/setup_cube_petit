@@ -355,8 +355,14 @@ _SSH_AUTH_OK_RE = re.compile(r"Hi ([A-Za-z0-9-]+)! You've successfully authentic
 
 # Unified wording for any SSH-authentication failure (precheck item 2 and
 # connect_repo/push): the frontend also shows recovery actions next to it.
+# Server-produced texts come in _ja/_en pairs; the frontend picks by the
+# selected language (see the i18n note at the top of app.js).
 SSH_ISSUE_MESSAGE = (
     "SSH鍵の問題です。手順2の「公開鍵の登録」がきちんとできているか、もう一度確認してください。"
+)
+SSH_ISSUE_MESSAGE_EN = (
+    "This is an SSH key problem. Please re-check that the public key was "
+    "registered correctly in step 2."
 )
 
 
@@ -381,14 +387,19 @@ async def open_claude_terminal(ws_dir: str) -> dict:
     workspace (first-login is interactive, so it cannot run inside the web
     app). Falls back from gnome-terminal to x-terminal-emulator."""
     if MOCK:
-        return {"ok": True, "message": "[mock] この機体の画面にターミナルを開きました(疑似)。"}
+        return {"ok": True,
+                "message": "[mock] この機体の画面にターミナルを開きました(疑似)。",
+                "message_en": "[mock] Opened a terminal on the robot's screen (simulated)."}
 
     import shutil
 
     env = _child_env()
     manual_hint = "手動でターミナルを開いて、コピーしたコマンドを実行してください。"
+    manual_hint_en = "Open a terminal yourself and run the copied command."
     if not env.get("DISPLAY") and not env.get("WAYLAND_DISPLAY"):
-        return {"ok": False, "message": f"この機体の画面が見つかりません。{manual_hint}"}
+        return {"ok": False,
+                "message": f"この機体の画面が見つかりません。{manual_hint}",
+                "message_en": f"No display found on this robot. {manual_hint_en}"}
 
     if shutil.which("gnome-terminal"):
         args = ["gnome-terminal", f"--working-directory={ws_dir}",
@@ -397,7 +408,9 @@ async def open_claude_terminal(ws_dir: str) -> dict:
         args = ["x-terminal-emulator", "-e",
                 f"bash -lc 'cd {shlex.quote(ws_dir)} && claude; exec bash'"]
     else:
-        return {"ok": False, "message": f"ターミナルアプリが見つかりません。{manual_hint}"}
+        return {"ok": False,
+                "message": f"ターミナルアプリが見つかりません。{manual_hint}",
+                "message_en": f"No terminal application found. {manual_hint_en}"}
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -410,17 +423,23 @@ async def open_claude_terminal(ws_dir: str) -> dict:
             start_new_session=True,  # survive a webapp server restart
         )
     except OSError as e:
-        return {"ok": False, "message": f"ターミナルを起動できませんでした({e})。{manual_hint}"}
+        return {"ok": False,
+                "message": f"ターミナルを起動できませんでした({e})。{manual_hint}",
+                "message_en": f"Could not launch a terminal ({e}). {manual_hint_en}"}
     # gnome-terminal re-spawns via its server process and exits quickly on
     # success; only an immediate non-zero exit is a real failure.
     await asyncio.sleep(0.5)
     if proc.returncode not in (None, 0):
-        return {"ok": False, "message": f"ターミナルを起動できませんでした。{manual_hint}"}
-    return {"ok": True, "message": "この機体の画面にターミナルを開きました。"}
+        return {"ok": False,
+                "message": f"ターミナルを起動できませんでした。{manual_hint}",
+                "message_en": f"Could not launch a terminal. {manual_hint_en}"}
+    return {"ok": True,
+            "message": "この機体の画面にターミナルを開きました。",
+            "message_en": "Opened a terminal on the robot's screen."}
 
 
-def _github_account_exists(account: str) -> tuple[Optional[bool], str]:
-    """(exists, message). exists=None means the check itself failed."""
+def _github_account_exists(account: str) -> tuple[Optional[bool], str, str]:
+    """(exists, message_ja, message_en). exists=None: the check itself failed."""
     import urllib.error
     import urllib.request
 
@@ -430,13 +449,21 @@ def _github_account_exists(account: str) -> tuple[Optional[bool], str]:
     )
     try:
         with urllib.request.urlopen(req, timeout=5):
-            return True, f"アカウント {account} が見つかりました。"
+            return (True,
+                    f"アカウント {account} が見つかりました。",
+                    f"Account {account} found.")
     except urllib.error.HTTPError as e:
         if e.code == 404:
-            return False, f"アカウント {account} が見つかりません(入力ミスはありませんか?)。"
-        return None, f"アカウントの確認ができませんでした(HTTP {e.code})。そのまま接続を試しても構いません。"
+            return (False,
+                    f"アカウント {account} が見つかりません(入力ミスはありませんか?)。",
+                    f"Account {account} was not found (typo?).")
+        return (None,
+                f"アカウントの確認ができませんでした(HTTP {e.code})。そのまま接続を試しても構いません。",
+                f"Could not verify the account (HTTP {e.code}). You may still try connecting.")
     except Exception:
-        return None, "アカウントの確認ができませんでした(ネットワークエラー)。接続を確認してください。"
+        return (None,
+                "アカウントの確認ができませんでした(ネットワークエラー)。接続を確認してください。",
+                "Could not verify the account (network error). Check your connection.")
 
 
 async def precheck_repo(account: str, repo: str) -> list[dict]:
@@ -449,25 +476,32 @@ async def precheck_repo(account: str, repo: str) -> list[dict]:
         return [
             {"id": "account", "ok": not bad, "warn": False, "ssh_issue": False,
              "message": (f"アカウント {account} が見つかりません(入力ミスはありませんか?)。" if bad
-                         else f"アカウント {account} が見つかりました。")},
+                         else f"アカウント {account} が見つかりました。"),
+             "message_en": (f"Account {account} was not found (typo?)." if bad
+                            else f"Account {account} found.")},
             {"id": "ssh", "ok": not bad, "warn": False, "ssh_issue": bad,
              "message": (SSH_ISSUE_MESSAGE if bad
-                         else f"この機体の鍵は {account} として認証されています。")},
+                         else f"この機体の鍵は {account} として認証されています。"),
+             "message_en": (SSH_ISSUE_MESSAGE_EN if bad
+                            else f"This robot's key authenticates as {account}.")},
             {"id": "repo", "ok": not bad, "warn": False, "ssh_issue": False,
              "message": (f"リポジトリが見つかりません。手順1で作成しましたか?(名前: {repo})" if bad
-                         else f"リポジトリ {account}/{repo} が見つかりました。")},
+                         else f"リポジトリ {account}/{repo} が見つかりました。"),
+             "message_en": (f"Repository not found. Did you create it in step 1? (name: {repo})" if bad
+                            else f"Repository {account}/{repo} found.")},
         ]
 
     items: list[dict] = []
 
     # 1. account exists (unauthenticated GitHub API)
-    exists, message = await asyncio.to_thread(_github_account_exists, account)
+    exists, message, message_en = await asyncio.to_thread(_github_account_exists, account)
     items.append({
         "id": "account",
         "ok": exists is not False,
         "warn": exists is None,
         "ssh_issue": False,
         "message": message,
+        "message_en": message_en,
     })
 
     # 2. SSH key authenticates against github.com. ssh -T exits 1 even on
@@ -489,19 +523,26 @@ async def precheck_repo(account: str, repo: str) -> list[dict]:
                     f"この機体の鍵は {auth_user} として認証されています。"
                     f"リポジトリは {auth_user} 側に作るか、アカウント名を合わせてください。"
                 ),
+                "message_en": (
+                    f"This robot's key authenticates as {auth_user}. "
+                    f"Create the repository under {auth_user}, or match the account name."
+                ),
             })
         else:
             items.append({
                 "id": "ssh", "ok": True, "warn": False, "ssh_issue": False,
                 "message": f"この機体の鍵は {auth_user} として認証されています。",
+                "message_en": f"This robot's key authenticates as {auth_user}.",
             })
     elif re.search(r"permission denied", text, re.I):
         items.append({"id": "ssh", "ok": False, "warn": False, "ssh_issue": True,
-                      "message": SSH_ISSUE_MESSAGE})
+                      "message": SSH_ISSUE_MESSAGE,
+                      "message_en": SSH_ISSUE_MESSAGE_EN})
     else:
         items.append({
             "id": "ssh", "ok": False, "warn": False, "ssh_issue": False,
             "message": f"GitHubへのSSH接続に失敗しました。ネットワーク接続を確認してください。({text[:120]})",
+            "message_en": f"SSH connection to GitHub failed. Check your network. ({text[:120]})",
         })
 
     # 3. the target repository exists (over the same SSH transport)
@@ -511,16 +552,20 @@ async def precheck_repo(account: str, repo: str) -> list[dict]:
     )
     if code == 0:
         items.append({"id": "repo", "ok": True, "warn": False, "ssh_issue": False,
-                      "message": f"リポジトリ {account}/{repo} が見つかりました。"})
+                      "message": f"リポジトリ {account}/{repo} が見つかりました。",
+                      "message_en": f"Repository {account}/{repo} found."})
     elif re.search(r"repository not found", text, re.I):
         items.append({"id": "repo", "ok": False, "warn": False, "ssh_issue": False,
-                      "message": f"リポジトリが見つかりません。手順1で作成しましたか?(名前: {repo})"})
+                      "message": f"リポジトリが見つかりません。手順1で作成しましたか?(名前: {repo})",
+                      "message_en": f"Repository not found. Did you create it in step 1? (name: {repo})"})
     elif re.search(r"permission denied", text, re.I):
         items.append({"id": "repo", "ok": False, "warn": False, "ssh_issue": True,
-                      "message": SSH_ISSUE_MESSAGE})
+                      "message": SSH_ISSUE_MESSAGE,
+                      "message_en": SSH_ISSUE_MESSAGE_EN})
     else:
         items.append({"id": "repo", "ok": False, "warn": False, "ssh_issue": False,
-                      "message": f"リポジトリの確認に失敗しました。({text[:120]})"})
+                      "message": f"リポジトリの確認に失敗しました。({text[:120]})",
+                      "message_en": f"Could not verify the repository. ({text[:120]})"})
 
     return items
 
@@ -743,17 +788,20 @@ def precheck_status(step_def: dict, state: dict) -> dict:
         dynamic_choices.append({
             "id": "build_only",
             "label_ja": "ソース一式はあるので、ビルドだけやり直す",
+            "label_en": "The source is all there — just rebuild it",
         })
     if ros_dir_exists:
         dynamic_choices.append({
             "id": "separate_ws",
             "label_ja": "既存の ~/ros はそのまま残し、別ワークスペース cube_petit_ros2_ws を新しく作って導入する",
+            "label_en": "Keep the existing ~/ros and install into a new separate workspace, cube_petit_ros2_ws",
         })
 
     return {
         "needed": needed,
         "existing": existing,
         "message_ja": precheck.get("message_ja", ""),
+        "message_en": precheck.get("message_en", ""),
         "choices": dynamic_choices + precheck.get("choices", []),
     }
 

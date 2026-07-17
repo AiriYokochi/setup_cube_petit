@@ -590,6 +590,22 @@ details.manual-fallback > summary { cursor: pointer; font-size: 0.9rem; color: v
 }
 .report-button:hover { background: rgba(255, 255, 255, 0.28); }
 
+/* --- language toggle (EN / 日本語) ------------------------------------------ */
+
+.lang-toggle {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--accent-contrast);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  padding: 0.3rem 0.9rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.lang-toggle:hover { background: rgba(255, 255, 255, 0.28); }
+/* When both header buttons are present, only the first pushes to the right. */
+.lang-toggle + .report-button { margin-left: 0.5rem; }
+
 .report-overlay {
   position: fixed;
   inset: 0;
