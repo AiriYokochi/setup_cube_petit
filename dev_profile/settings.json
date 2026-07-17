@@ -1,0 +1,91 @@
+{
+  "editor.formatOnPaste": true,
+  "editor.formatOnType": true,
+  "editor.minimap.enabled": false,
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.autoSave": "onFocusChange",
+  "git.autofetch": true,
+
+  "[cpp]": {
+    "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+  },
+  "clangd.arguments": ["--clang-tidy"],
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "cmake.options.statusBarVisibility": "compact",
+  "cmakeFormat.args": ["-c", "/opt/work/.github/ros2/.cmake-format"],
+
+  "python.languageServer": "Pylance",
+  "python.defaultInterpreterPath": "/bin/python3",
+  "ruff.organizeImports": false,
+  "ruff.configuration": "/opt/work/.github/pyproject.toml",
+  "[python]": {
+    "editor.codeActionsOnSave": {
+      "source.fixAll": "explicit",
+      "source.organizeImports": "explicit"
+    },
+    "editor.defaultFormatter": "eeyore.yapf"
+  },
+  "isort.args": ["--sp", "/opt/work/.github/pyproject.toml", "--src", "."],
+  "yapf.args": ["--style", "/opt/work/.github/pyproject.toml", "--no-local-style"],
+
+  "psi-header.templates": [
+    { "language": "*", "template": [] },
+    {
+      "language": "python",
+      "template": ["Copyright (c) <<year>> <<company>>.", "", "<<licensetext>>"]
+    },
+    { "language": "cpp", "mapTo": "python" },
+    {
+      "language": "xml",
+      "template": [
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+        "<maintainer email=\"<<authoremail>>\"><<company>>.</maintainer>",
+        "<license>Apache 2.0</license>"
+      ]
+    }
+  ],
+  "psi-header.lang-config": [
+    { "language": "*", "begin": "", "prefix": "", "end": "" },
+    {
+      "language": "cpp",
+      "begin": "/*********************************************************************",
+      "prefix": " * ",
+      "end": " ********************************************************************/"
+    },
+    {
+      "language": "python",
+      "begin": "",
+      "prefix": "# ",
+      "end": "",
+      "beforeHeader": ["#!/usr/bin/env python", ""]
+    }
+  ],
+  "psi-header.config": {
+    "company": "SoftBank Corp",
+    "license": "CustomUri",
+    "authorEmail": "SBGRP-git@g.softbank.co.jp",
+    "blankLinesAfter": 1
+  },
+  "psi-header.license-reference": {
+    "uriIsLocalFile": true,
+    "uri": "${userHome}/work/.github/.apache-2"
+  },
+  "psi-header.changes-tracking": { "autoHeader": "manualSave" },
+
+  "[xml]": {
+    "editor.tabSize": 2,
+    "editor.detectIndentation": false
+  },
+  "xml.format.enforceQuoteStyle": "preferred",
+  "xml.format.emptyElements": "collapse",
+  "xml.format.spaceBeforeEmptyCloseTag": false,
+  "xml.format.maxLineWidth": 0,
+  "xml.codeLens.enabled": true,
+  "xml.fileAssociations": [
+    { "pattern": "**/*.urdf", "systemId": "/opt/work/.github/urdf.xsd" },
+    { "pattern": "**/*.{sdf,world}", "systemId": "/opt/work/.github/sdf.xsd" }
+  ],
+
+  "redhat.telemetry.enabled": false
+}
