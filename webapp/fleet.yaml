@@ -1,0 +1,20 @@
+# Fleet landing page config (served at /fleet).
+# 機体の追加・削除はこのファイルを編集してください(ページは /api/fleet 経由で読みます)。
+# Hosts can be mDNS names (cube-petit-<name>.local) or IP addresses.
+# Robots that are powered off / not on this network simply show a gray dot.
+robots:
+  - name: orange
+    host: cube-petit-orange.local
+  - name: yellow
+    host: cube-petit-yellow.local
+  - name: pink
+    host: cube-petit-pink.local
+  - name: violet
+    host: cube-petit-violet.local
+  - name: clear
+    host: cube-petit-clear.local
+
+ports:
+  setup: 8760      # setup wizard (this web app)
+  control: 5173    # robot web interface (frontend)
+  api: 8000        # robot web interface API server

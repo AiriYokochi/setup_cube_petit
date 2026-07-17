@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cube Petit 機体一覧</title>
+<link rel="icon" href="/static/petit.png">
+<link rel="stylesheet" href="/static/fleet.css">
+</head>
+<body>
+  <header class="fleet-topbar">
+    <h1>Cube Petit 機体一覧</h1>
+  </header>
+
+  <main class="fleet-layout">
+    <p class="fleet-hint">
+      機体を選んで開いてください。●は「この端末からセットアップ画面に届くか」の目安です
+      (電源が入っていない機体や別ネットワークの機体は灰色になります)。
+    </p>
+    <div id="fleet-grid" class="fleet-grid">
+      <p class="fleet-loading">読み込み中...</p>
+    </div>
+    <p class="fleet-footnote">
+      機体の追加・削除は <code>webapp/fleet.yaml</code> を編集してください。
+    </p>
+  </main>
+
+  <script src="/static/fleet.js"></script>
+</body>
+</html>

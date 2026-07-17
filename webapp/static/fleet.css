@@ -1,0 +1,139 @@
+/* Fleet landing page. Standalone stylesheet, but mirrors style.css's palette
+   so the page matches the wizard's look (including dark mode). */
+:root {
+  --bg: #f4f5f7;
+  --panel-bg: #ffffff;
+  --border: #dcdfe4;
+  --text: #202225;
+  --muted: #6b7280;
+  --accent: #d97706; /* cube petit orange */
+  --accent-contrast: #ffffff;
+  --up: #16a34a;
+  --down: #9ca3af;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.fleet-topbar {
+  padding: 0.9rem 1.2rem;
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+.fleet-topbar h1 { font-size: 1.15rem; margin: 0; }
+
+.fleet-layout {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.fleet-hint {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.fleet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.fleet-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.fleet-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.fleet-card-head img {
+  width: 40px;
+  height: auto;
+  image-rendering: pixelated;
+}
+.fleet-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  flex: 1;
+}
+
+.fleet-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--down);
+  flex: 0 0 auto;
+}
+.fleet-dot.checking { animation: fleet-pulse 1.2s ease-in-out infinite; }
+.fleet-dot.up { background: var(--up); animation: none; }
+.fleet-dot.down { background: var(--down); animation: none; }
+@keyframes fleet-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.fleet-host {
+  font-size: 0.8rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.fleet-links {
+  display: flex;
+  gap: 0.6rem;
+}
+.fleet-links a {
+  flex: 1;
+  text-align: center;
+  text-decoration: none;
+  padding: 0.5rem 0.6rem;
+  border-radius: 8px;
+  font-size: 0.92rem;
+}
+.fleet-links a.setup {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+.fleet-links a.control {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.fleet-loading, .fleet-footnote {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.fleet-footnote code {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d;
+    --panel-bg: #1f2228;
+    --border: #33373f;
+    --text: #e6e7ea;
+    --muted: #9aa1ab;
+  }
+}
