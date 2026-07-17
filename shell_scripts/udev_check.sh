@@ -105,7 +105,16 @@ echo "=== LiDAR Data Check ==="
 if [[ -e "$LIDAR_DEV" ]]; then
   # Put the tty into raw mode before reading. Baud rate is intentionally
   # left untouched (existing setting is trusted).
-  stty -F "$LIDAR_DEV" raw -echo 2>/dev/null || true
+  #
+  # On real hardware, plain `stty -F "$LIDAR_DEV" ...` can block forever:
+  # opening a serial device without `clocal` waits for carrier detect
+  # (CLOCAL unset), and if nothing ever asserts carrier the open() call
+  # inside stty never returns -- the surrounding `timeout` on the `cat`
+  # below is useless here because it never even gets that far. Wrapping
+  # the stty call itself in `timeout` and adding `clocal` fixes both: once
+  # this succeeds, later opens of the same device no longer wait for
+  # carrier either.
+  timeout "${LIDAR_TIMEOUT}" stty -F "$LIDAR_DEV" raw -echo clocal 2>/dev/null || true
   BYTE_COUNT=$(timeout ${LIDAR_TIMEOUT} cat "$LIDAR_DEV" 2>/dev/null | head -c 256 | wc -c)
 
   if [[ "$BYTE_COUNT" -gt 0 ]]; then
@@ -124,7 +133,10 @@ echo "=== IMU Data Check ==="
 if [[ -e "$IMU_DEV" ]]; then
   # Put the tty into raw mode before reading. Baud rate is intentionally
   # left untouched (9600 already works on real hardware).
-  stty -F "$IMU_DEV" raw -echo 2>/dev/null || true
+  # See the LiDAR check above for why this stty call itself needs `timeout`
+  # and `clocal`: without them, opening the device can hang forever waiting
+  # for carrier detect, and the whole check gets stuck at "running".
+  timeout "${IMU_TIMEOUT}" stty -F "$IMU_DEV" raw -echo clocal 2>/dev/null || true
   BYTE_COUNT=$(timeout ${IMU_TIMEOUT} cat "$IMU_DEV" 2>/dev/null | head -c 256 | wc -c)
 
   if [[ "$BYTE_COUNT" -gt 0 ]]; then
