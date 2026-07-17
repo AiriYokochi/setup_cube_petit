@@ -36,6 +36,21 @@ sudoは任意(`/opt/work/.github` のシンボリックリンク作成のみ。�
 自由に置いてよい。共有設定を更新したいときは `settings.json` を直してこのスクリプトを
 再実行する(既存のプロファイル設定は自動バックアップされる)。
 
+## lintの自動フック(pre-commit)
+
+`setup_dev_profile.bash` の最後(6/6)で `setup_lint_hooks.bash` が実行され、
+開発リポジトリ(cube_petit_ros / cube_petit_interaction / cube_petit_scenario の
+cloneがあるもの)に **pre-commit フック**が入ります。各リポジトリ同梱の
+`.pre-commit-config.yaml`(CIと同じ isort / yapf / ruff / yamllint 等)が
+`git commit` のたびに自動で走り、問題があればコミットが止まります
+(多くは自動修正されるので、`git add` し直して再コミットすれば通ります)。
+
+- 単体で入れ直す: `./dev_profile/setup_lint_hooks.bash`
+- 1回だけスキップ: `git commit --no-verify`
+- フック環境は各リポジトリでの初回コミット時にダウンロードされます(要ネットワーク。
+  `sbgisen/pre-commit-hooks` の項目はGitHubへのSSHアクセスも必要)
+- pre-commitツール本体は `uv tool install` でユーザーローカルに入ります(sudo不要)
+
 ## 既知の注意
 
 - `settings.json` が参照する `urdf.xsd` / `sdf.xsd`(URDFのXML検証用スキーマ)は

@@ -22,7 +22,7 @@ if ! command -v code >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "== 1/5 shared config repo (sbgisen/.github) =="
+echo "== 1/6 shared config repo (sbgisen/.github) =="
 if [ -d "$GITHUB_DIR/.git" ]; then
   git -C "$GITHUB_DIR" pull --ff-only || echo "WARN: could not update $GITHUB_DIR (offline?); continuing with the existing checkout"
 else
@@ -35,7 +35,7 @@ if [ ! -f "$GITHUB_DIR/.apache-2" ]; then
   cp "$HERE/.apache-2" "$GITHUB_DIR/.apache-2"
 fi
 
-echo "== 2/5 /opt/work/.github symlink =="
+echo "== 2/6 /opt/work/.github symlink =="
 # The profile references /opt/work/.github/... (same path convention as the
 # sbgisen dev machines). Point it at the clone above.
 if [ -e /opt/work/.github ]; then
@@ -49,12 +49,12 @@ else
   echo "  sudo mkdir -p /opt/work && sudo ln -s $GITHUB_DIR /opt/work/.github"
 fi
 
-echo "== 3/5 extensions =="
+echo "== 3/6 extensions =="
 grep -v '^\s*#' "$HERE/extensions.txt" | grep -v '^\s*$' | while read -r ext; do
   code --profile "$PROFILE_NAME" --install-extension "$ext" --force
 done
 
-echo "== 4/5 profile settings =="
+echo "== 4/6 profile settings =="
 # Resolve the profile's storage directory from VS Code's profile registry.
 PROFILE_DIR="$(python3 - "$CODE_USER_DIR" "$PROFILE_NAME" <<'PY'
 import json
@@ -86,7 +86,7 @@ fi
 cp "$HERE/settings.json" "$PROFILE_DIR/settings.json"
 echo "wrote $PROFILE_DIR/settings.json"
 
-echo "== 5/5 use the profile for new windows =="
+echo "== 5/6 use the profile for new windows =="
 # Merge into the *default* user settings (do not clobber personal settings).
 python3 - "$CODE_USER_DIR/settings.json" "$PROFILE_NAME" <<'PY'
 import json
@@ -114,6 +114,11 @@ if settings.get("window.newWindowProfile") != name:
 else:
     print("window.newWindowProfile already set")
 PY
+
+echo "== 6/6 lint hooks (pre-commit) =="
+# Commit-time lint for the development repos; skips repos that are not
+# cloned yet, never fatal for the profile setup itself.
+bash "$HERE/setup_lint_hooks.bash" || echo "WARN: lint hook setup incomplete (see messages above)"
 
 echo ""
 echo "Done. Open a new VS Code window -- it starts with the '$PROFILE_NAME' profile."
