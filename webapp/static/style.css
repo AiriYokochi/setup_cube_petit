@@ -275,6 +275,29 @@ details.log-panel summary {
   word-break: break-all;
 }
 
+/* --- bluetooth controller pairing (step 7) --------------------------------- */
+
+.bt-devices { margin: 0.6rem 0; }
+.bt-device-list {
+  list-style: none;
+  margin: 0.4rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.bt-device-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.bt-device-info { font-size: 0.95rem; word-break: break-all; }
+
 .placeholder { color: var(--muted); }
 
 @media (prefers-color-scheme: dark) {

@@ -134,3 +134,15 @@ steps:
         label_ja: "RealSense(カメラ、ビルドに10分以上)"
         type: bool
         default: true
+
+  - id: bt_controller
+    title_ja: "7. Bluetoothコントローラ接続"
+    description_ja: |
+      ロボットを操作するコントローラをBluetoothでペアリングします。
+      コントローラをペアリングモードにしてください(ボタン長押し)。
+      準備ができたら「スキャン」を押すと、近くのBluetooth機器が一覧表示されます。
+      目的のコントローラの「接続」を押すとペアリング・接続まで自動で行います。
+    type: bluetooth
+    needs_sudo: false
+    skippable: true
+    requires_reboot: false

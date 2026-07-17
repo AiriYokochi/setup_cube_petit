@@ -232,6 +232,169 @@ function renderPrecheck(stepId, precheck, container) {
   container.appendChild(box);
 }
 
+// --- bluetooth controller pairing (step 7) ---------------------------------
+
+const BT_PRIORITY_RE = /controller|gamepad|joy-?stick|xbox|dualshock|dualsense/i;
+
+function sortBtDevices(devices) {
+  return [...devices].sort((a, b) => {
+    const pa = BT_PRIORITY_RE.test(a.name) ? 0 : 1;
+    const pb = BT_PRIORITY_RE.test(b.name) ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+}
+
+function renderBtDeviceList(container, devices, stepId) {
+  container.innerHTML = "";
+  if (!devices.length) {
+    const p = document.createElement("p");
+    p.className = "help";
+    p.textContent = "デバイスが見つかりませんでした。コントローラをペアリングモードにしてから、もう一度スキャンしてください。";
+    container.appendChild(p);
+    return;
+  }
+  const ul = document.createElement("ul");
+  ul.className = "bt-device-list";
+  sortBtDevices(devices).forEach((dev) => {
+    const li = document.createElement("li");
+    li.className = "bt-device-item";
+
+    const info = document.createElement("span");
+    info.className = "bt-device-info";
+    info.textContent = `${dev.name || "(名称不明)"} (${dev.mac})` + (dev.paired ? " [ペア済み]" : "");
+    li.appendChild(info);
+
+    const btn = mkButton("primary", dev.connected ? "接続済み" : "接続", async () => {
+      btn.disabled = true;
+      btn.textContent = "接続中...";
+      try {
+        const res = await api("/api/bluetooth/connect", { method: "POST", body: { mac: dev.mac } });
+        if (res.ok) {
+          btn.textContent = "接続済み";
+          info.textContent += " — 接続しました";
+          await api(`/api/steps/${stepId}/complete`, { method: "POST" });
+          await loadState();
+        } else {
+          btn.disabled = false;
+          btn.textContent = "接続";
+          alert("接続に失敗しました: " + (res.detail || ""));
+        }
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = "接続";
+        alert("エラー: " + err.message);
+      }
+    });
+    btn.disabled = !!dev.connected;
+    li.appendChild(btn);
+    ul.appendChild(li);
+  });
+  container.appendChild(ul);
+}
+
+function renderBluetoothStep(id, step, el, actions) {
+  const scanStatus = document.createElement("p");
+  scanStatus.className = "help";
+  el.appendChild(scanStatus);
+
+  const deviceBox = document.createElement("div");
+  deviceBox.className = "bt-devices";
+  el.appendChild(deviceBox);
+
+  const scanBtn = mkButton("primary", "スキャン", async () => {
+    scanBtn.disabled = true;
+    scanStatus.textContent = "スキャン中...(数秒かかります)";
+    try {
+      const res = await api("/api/bluetooth/scan", { method: "POST" });
+      renderBtDeviceList(deviceBox, res.devices, id);
+      scanStatus.textContent = `${res.devices.length}件のデバイスが見つかりました。`;
+    } catch (err) {
+      scanStatus.textContent = "エラー: " + err.message;
+    } finally {
+      scanBtn.disabled = false;
+    }
+  });
+  actions.appendChild(scanBtn);
+
+  if (step.skippable && step.status !== "done") {
+    const skipBtn = mkButton("secondary", "スキップ", async () => {
+      await api(`/api/steps/${id}/skip`, { method: "POST" });
+      await loadState();
+    });
+    actions.appendChild(skipBtn);
+  }
+
+  // Show already-known devices (no fresh scan) as soon as the step opens.
+  api("/api/bluetooth/devices")
+    .then((res) => renderBtDeviceList(deviceBox, res.devices, id))
+    .catch(() => {});
+}
+
+// --- sensor connection check (step 8) ---------------------------------------
+
+function checkItemEl(item) {
+  const li = document.createElement("li");
+  li.className = "check-item " + (item.ok ? "ok" : "ng");
+  const mark = document.createElement("span");
+  mark.className = "check-mark";
+  mark.textContent = item.ok ? "✓" : "✗";
+  li.appendChild(mark);
+  const label = document.createElement("span");
+  label.className = "check-label";
+  label.textContent = item.label;
+  li.appendChild(label);
+  if (!item.ok && item.detail) {
+    const hint = document.createElement("div");
+    hint.className = "check-hint";
+    hint.textContent = item.detail;
+    li.appendChild(hint);
+  }
+  return li;
+}
+
+async function loadCheckResult(id, container, statusEl) {
+  try {
+    const res = await api(`/api/steps/${id}/result`);
+    container.innerHTML = "";
+    if (!res.items.length) {
+      statusEl.textContent = "";
+      return;
+    }
+    const ul = document.createElement("ul");
+    ul.className = "check-list";
+    res.items.forEach((item) => ul.appendChild(checkItemEl(item)));
+    container.appendChild(ul);
+    statusEl.textContent = `${res.ok_count} / ${res.total} OK`;
+  } catch (err) {
+    // no result yet (never run): leave the panel empty
+  }
+}
+
+function renderCheckStep(id, step, el, actions, running) {
+  const statusEl = document.createElement("p");
+  statusEl.className = "help check-status";
+  el.appendChild(statusEl);
+
+  const resultBox = document.createElement("div");
+  resultBox.className = "check-result";
+  el.appendChild(resultBox);
+
+  const runBtn = mkButton("primary", step.status === "pending" ? "チェック実行" : "もう一度チェック", async () => {
+    runBtn.disabled = true;
+    try {
+      await api(`/api/steps/${id}/run`, { method: "POST" });
+      await loadState();
+    } catch (err) {
+      alert("エラー: " + err.message);
+    }
+  });
+  runBtn.disabled = running;
+  actions.appendChild(runBtn);
+
+  loadCheckResult(id, resultBox, statusEl);
+}
+
 function renderDetail(id) {
   const step = findStep(id);
   const el = document.getElementById("step-detail");
@@ -314,6 +477,10 @@ function renderDetail(id) {
     );
     btn.disabled = step.status === "done";
     actions.appendChild(btn);
+  } else if (step.type === "bluetooth") {
+    renderBluetoothStep(id, step, el, actions);
+  } else if (step.type === "check") {
+    renderCheckStep(id, step, el, actions, running);
   } else {
     const runLabel = step.status === "failed" ? "もう一度実行" : "実行";
     const runBtn = mkButton("primary", runLabel, async () => {

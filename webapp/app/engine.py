@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import shlex
 from pathlib import Path
 from typing import Optional
@@ -254,6 +255,103 @@ async def resolve_precheck(step_def: dict, choice: str) -> StepRun:
     quoted = " ".join(shlex.quote(p) for p in paths)
     cmd = f'echo "Removing existing directories ({"mock sandbox" if MOCK else "real"})..."\nrm -rf -- {quoted}\necho "Removed existing directories."'
     return await start_command(f"{step_def['id']}__precheck", cmd)
+
+
+# --- bluetooth controller pairing (step 7) ---------------------------------
+#
+# bluetoothctl one-shots (power/scan/devices/info/pair/trust/connect) are
+# short, non-interactive commands, unlike the long-running setup scripts
+# above -- they don't need the StepRun/log-streaming machinery, just a
+# blocking-but-async subprocess call with a timeout.
+
+_BT_DEVICE_RE = re.compile(r"^Device\s+([0-9A-Fa-f:]{17})\s+(.+)$")
+
+# Mock mode only: simulates bluetoothctl's persistent device list across
+# scan/connect calls within a single server run.
+_mock_bt_devices: list[dict] = []
+
+
+async def _run_cmd(args: list[str], timeout: float = 15.0) -> tuple[int, str]:
+    """Run a short non-interactive command and return (returncode, combined
+    stdout+stderr)."""
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        env=_child_env(),
+    )
+    try:
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return 124, "(timed out)"
+    return proc.returncode or 0, stdout.decode(errors="replace")
+
+
+async def _bluetooth_info(mac: str) -> dict:
+    _, out = await _run_cmd(["bluetoothctl", "info", mac], timeout=10)
+    return {
+        "paired": bool(re.search(r"Paired:\s*yes", out)),
+        "connected": bool(re.search(r"Connected:\s*yes", out)),
+    }
+
+
+async def bluetooth_devices() -> list[dict]:
+    """Currently known devices, without triggering a new scan."""
+    if MOCK:
+        return list(_mock_bt_devices)
+    _, out = await _run_cmd(["bluetoothctl", "devices"], timeout=10)
+    devices = []
+    for line in out.splitlines():
+        m = _BT_DEVICE_RE.match(line.strip())
+        if not m:
+            continue
+        mac, name = m.group(1), m.group(2).strip()
+        devices.append({"mac": mac, "name": name or mac, **await _bluetooth_info(mac)})
+    return devices
+
+
+async def bluetooth_scan() -> list[dict]:
+    """Power on the adapter, scan for ~12s, then return the device list."""
+    if MOCK:
+        await asyncio.sleep(2)
+        if not _mock_bt_devices:
+            _mock_bt_devices.extend(
+                [
+                    {"mac": "AA:11:22:33:44:01", "name": "Pro Controller", "paired": False, "connected": False},
+                    {"mac": "AA:11:22:33:44:02", "name": "Wireless Controller", "paired": False, "connected": False},
+                    {"mac": "AA:11:22:33:44:03", "name": "Airi's Earbuds", "paired": True, "connected": False},
+                ]
+            )
+        return list(_mock_bt_devices)
+    await _run_cmd(["bluetoothctl", "power", "on"], timeout=10)
+    await _run_cmd(["bluetoothctl", "--timeout", "12", "scan", "on"], timeout=20)
+    return await bluetooth_devices()
+
+
+async def bluetooth_connect(mac: str) -> dict:
+    """pair -> trust -> connect, in that order. A pair failure is tolerated
+    (the device may already be paired from a previous run); what matters is
+    whether connect ultimately succeeds."""
+    if MOCK:
+        for dev in _mock_bt_devices:
+            if dev["mac"] == mac:
+                dev["paired"] = True
+                dev["connected"] = True
+                return {"ok": True, "detail": f"(mock) connected to {dev['name']}"}
+        return {"ok": False, "detail": "(mock) unknown device"}
+
+    detail_lines = []
+    _, out = await _run_cmd(["bluetoothctl", "pair", mac], timeout=30)
+    detail_lines.append(out.strip())
+    _, out = await _run_cmd(["bluetoothctl", "trust", mac], timeout=30)
+    detail_lines.append(out.strip())
+    code, out = await _run_cmd(["bluetoothctl", "connect", mac], timeout=30)
+    detail_lines.append(out.strip())
+    connect_ok = code == 0 or "Connection successful" in out
+    return {"ok": connect_ok, "detail": "\n".join(l for l in detail_lines if l)}
 
 
 # --- mock-only helpers used by the debug API to exercise the precheck branch ---

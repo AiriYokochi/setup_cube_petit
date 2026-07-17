@@ -81,6 +81,10 @@ class PrecheckResolveBody(BaseModel):
     choice: str
 
 
+class BluetoothConnectBody(BaseModel):
+    mac: str
+
+
 # --- pages ---------------------------------------------------------------
 
 @app.get("/")
@@ -174,7 +178,7 @@ async def resolve_precheck(step_id: str, body: PrecheckResolveBody):
 @app.post("/api/steps/{step_id}/run")
 async def run_step(step_id: str, body: RunBody = Body(default=RunBody())):
     step_def = _get_step_or_404(step_id)
-    if step_def["type"] == "reboot_gate":
+    if step_def["type"] in _MANUALLY_COMPLETABLE_TYPES:
         raise HTTPException(400, "this step has no run action; call /complete instead")
     if engine.is_running(step_id):
         raise HTTPException(409, "step is already running")
@@ -206,17 +210,41 @@ async def skip_step(step_id: str):
     return {"status": "skipped"}
 
 
+# Step types with no single "run" command: reboot_gate has nothing to run
+# (just an ack), bluetooth finishes via its own /api/bluetooth/* endpoints.
+_MANUALLY_COMPLETABLE_TYPES = {"reboot_gate", "bluetooth"}
+
+
 @app.post("/api/steps/{step_id}/complete")
 async def complete_step(step_id: str):
-    """Used by the reboot_gate step: there is nothing to run, just an ack."""
     step_def = _get_step_or_404(step_id)
-    if step_def["type"] != "reboot_gate":
-        raise HTTPException(400, "only reboot_gate steps use /complete")
+    if step_def["type"] not in _MANUALLY_COMPLETABLE_TYPES:
+        raise HTTPException(400, "this step type does not support manual /complete")
     state = state_mod.load_state()
     state_mod.set_step_status(state, step_id, status="done")
-    state["awaiting_reboot"] = True
+    result = {"status": "done"}
+    if step_def["type"] == "reboot_gate":
+        state["awaiting_reboot"] = True
+        result["awaiting_reboot"] = True
     state_mod.save_state(state)
-    return {"status": "done", "awaiting_reboot": True}
+    return result
+
+
+# --- bluetooth controller pairing (step 7) ----------------------------------
+
+@app.post("/api/bluetooth/scan")
+async def bluetooth_scan():
+    return {"devices": await engine.bluetooth_scan()}
+
+
+@app.get("/api/bluetooth/devices")
+async def bluetooth_devices():
+    return {"devices": await engine.bluetooth_devices()}
+
+
+@app.post("/api/bluetooth/connect")
+async def bluetooth_connect(body: BluetoothConnectBody):
+    return await engine.bluetooth_connect(body.mac)
 
 
 # --- log streaming (SSE) ---------------------------------------------------
