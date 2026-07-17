@@ -11,10 +11,13 @@ DEVICES=(
 )
 # Set LiDAR dev path
 LIDAR_DEV="/dev/ttyLD06-19"
-LIDAR_TIMEOUT=0.1
+# 0.1s was too short: the read frequently caught 0 bytes even when the
+# LiDAR was sending data, causing a false NG. 2s reliably captures at
+# least one frame on real hardware.
+LIDAR_TIMEOUT=2
 # Set IMU dev path
 IMU_DEV="/dev/ttyWitMotion"
-IMU_TIMEOUT=0.1
+IMU_TIMEOUT=2
 
 echo "=== /dev device check ==="
 
@@ -100,6 +103,9 @@ echo ""
 echo "=== LiDAR Data Check ==="
 
 if [[ -e "$LIDAR_DEV" ]]; then
+  # Put the tty into raw mode before reading. Baud rate is intentionally
+  # left untouched (existing setting is trusted).
+  stty -F "$LIDAR_DEV" raw -echo 2>/dev/null || true
   BYTE_COUNT=$(timeout ${LIDAR_TIMEOUT} cat "$LIDAR_DEV" 2>/dev/null | head -c 256 | wc -c)
 
   if [[ "$BYTE_COUNT" -gt 0 ]]; then
@@ -116,6 +122,9 @@ echo "=== IMU Data Check ==="
 
 
 if [[ -e "$IMU_DEV" ]]; then
+  # Put the tty into raw mode before reading. Baud rate is intentionally
+  # left untouched (9600 already works on real hardware).
+  stty -F "$IMU_DEV" raw -echo 2>/dev/null || true
   BYTE_COUNT=$(timeout ${IMU_TIMEOUT} cat "$IMU_DEV" 2>/dev/null | head -c 256 | wc -c)
 
   if [[ "$BYTE_COUNT" -gt 0 ]]; then
@@ -145,8 +154,28 @@ echo "=== Bluetooth Controller Check ==="
 if ! command -v bluetoothctl &>/dev/null; then
   echo -e "${RED}[NG]${NC} bluetoothctl not found"
 else
-  # Get connected Bluetooth devices
-  CONNECTED_BT_DEVICES=$(bluetoothctl info | grep "Connected: yes" -B 1)
+  # `bluetoothctl info | grep "Connected: yes" -B 1` (the previous approach)
+  # is broken: -B 1 grabs the line right above "Connected: yes", which is
+  # always "Blocked: no" in bluetoothctl's output, never the device Name.
+  # It also only ever looked at whatever single device `bluetoothctl info`
+  # (no argument) defaults to.
+  #
+  # Instead, list every currently-connected device as "Device <MAC> <Name>"
+  # lines and match the controller regex against the Name portion.
+  CONNECTED_BT_DEVICES=$(bluetoothctl devices Connected 2>/dev/null)
+
+  # Older BlueZ versions don't support the "Connected" filter argument to
+  # `devices`, so fall back to checking each known device individually.
+  if [[ -z "$CONNECTED_BT_DEVICES" ]]; then
+    while read -r _ mac _; do
+      [[ -z "$mac" ]] && continue
+      INFO=$(bluetoothctl info "$mac" 2>/dev/null)
+      if echo "$INFO" | grep -q "Connected: yes"; then
+        NAME=$(echo "$INFO" | grep "Name:" | head -n 1 | sed 's/^[[:space:]]*Name:[[:space:]]*//')
+        CONNECTED_BT_DEVICES+=$'\n'"Device ${mac} ${NAME}"
+      fi
+    done < <(bluetoothctl devices 2>/dev/null)
+  fi
 
   if [[ -z "$CONNECTED_BT_DEVICES" ]]; then
     echo -e "${RED}[NG]${NC} No Bluetooth devices connected"
