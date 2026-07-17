@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import platform
 import re
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -591,7 +594,17 @@ async def refresh_updates():
 
 @app.post("/api/updates/self")
 async def update_self():
-    return await updates.update_self()
+    result = await updates.update_self()
+    if result.get("ok") and result.get("updated"):
+        # New code is on disk. Tell the frontend a restart is coming, give
+        # the response ~1.5s to reach the browser, then exit with the magic
+        # code run.sh's supervisor loop restarts on. Mock never exits (there
+        # is no supervisor in tests) -- the frontend still exercises its
+        # poll-and-reload path against the still-running server.
+        result["restarting"] = True
+        if not engine.MOCK:
+            asyncio.get_event_loop().call_later(1.5, os._exit, 42)
+    return result
 
 
 @app.post("/api/updates/robot")
@@ -608,6 +621,83 @@ async def update_robot():
     run = await updates.run_robot_update(step_def, state)
     asyncio.create_task(_watch_run(step_def["id"], run))
     return {"status": "started", "run_key": step_def["id"]}
+
+
+# --- bug report draft --------------------------------------------------------
+
+# Values that must never leave the machine inside a bug report. Log lines are
+# filtered through these before they reach the diagnostics preview.
+_SECRET_ASSIGN_RE = re.compile(
+    r"((?:OPENAI|ANTHROPIC)?_?API_?KEY|TOKEN|PASSWORD|SECRET)(\s*[=:]\s*)(\S+)",
+    re.IGNORECASE,
+)
+_SECRET_SK_RE = re.compile(r"\bsk-[A-Za-z0-9_-]{8,}")
+
+_REPORT_LOG_TAIL = 30
+
+
+def _mask_secrets(line: str) -> str:
+    line = _SECRET_ASSIGN_RE.sub(r"\1\2***", line)
+    return _SECRET_SK_RE.sub("sk-***", line)
+
+
+def _report_version() -> str:
+    if engine.MOCK:
+        return "v0.0.0-mock"
+    try:
+        out = subprocess.run(
+            ["git", "describe", "--tags", "--always"],
+            cwd=str(engine.REPO_ROOT), capture_output=True, text=True, timeout=5,
+        )
+        return out.stdout.strip() or "(不明)"
+    except Exception:
+        return "(不明)"
+
+
+def _report_os() -> str:
+    pretty = ""
+    try:
+        for raw in Path("/etc/os-release").read_text(encoding="utf-8").splitlines():
+            if raw.startswith("PRETTY_NAME="):
+                pretty = raw.split("=", 1)[1].strip().strip('"')
+                break
+    except OSError:
+        pass
+    return f"{pretty or 'Linux'} / {platform.release()}"
+
+
+@app.get("/api/report/draft")
+async def report_draft():
+    """Diagnostics text for the bug-report panel. Assembled server-side so the
+    frontend never has to touch raw logs; secrets are masked here."""
+    state = state_mod.load_state()
+    lines = [
+        f"- バージョン: {_report_version()}",
+        f"- 個体名: {state.get('robot_namespace') or '(未設定)'}",
+        f"- OS: {_report_os()}",
+    ]
+
+    failed = []
+    for step_def in STEPS:
+        st = state_mod.get_step_status(state, step_def["id"])
+        if st.get("status") == "failed":
+            failed.append((step_def, st))
+    if not failed:
+        lines.append("- 失敗したステップ: なし")
+    for step_def, st in failed:
+        code = st.get("exit_code")
+        lines.append(
+            f"- 失敗したステップ: {step_def['title_ja']}"
+            f" (終了コード: {code if code is not None else '不明(中断)'})"
+        )
+        log_path = state_mod.log_path_for(step_def["id"])
+        if log_path.exists():
+            tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            tail = tail[-_REPORT_LOG_TAIL:]
+            lines.append(f"  ログ末尾({len(tail)}行):")
+            lines.extend("    " + _mask_secrets(t) for t in tail)
+
+    return {"diagnostics": "\n".join(lines)}
 
 
 # --- installed-tool detection (dev_tools step) -------------------------------

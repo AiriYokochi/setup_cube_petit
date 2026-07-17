@@ -97,4 +97,20 @@ if [ -z "${CUBE_PETIT_SETUP_NO_BROWSER:-}" ] \
 fi
 
 cd "$HERE"
-exec uvicorn app.main:app --host "$HOST" --port "$PORT"
+
+# Supervisor loop: the server exits with code 42 after applying a self-update
+# (POST /api/updates/self), which means "restart me on the new code". Any
+# other exit code ends run.sh as before. The browser-open block above only
+# runs once, so a restart never opens a second tab.
+while true; do
+  set +e
+  uvicorn app.main:app --host "$HOST" --port "$PORT"
+  code=$?
+  set -e
+  if [ "$code" -eq 42 ]; then
+    echo "[run.sh] update applied -- reinstalling dependencies and restarting the server..."
+    pip install -q --disable-pip-version-check -r "$HERE/requirements.txt"
+    continue
+  fi
+  exit "$code"
+done
