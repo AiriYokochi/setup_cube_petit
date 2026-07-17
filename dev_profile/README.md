@@ -1,6 +1,6 @@
-# dev_profile — 開発環境プロファイル(VS Code「sbgisen-ROS2」)
+# dev_profile — 開発環境プロファイル(VS Code「cube-petit-ROS2」)
 
-CubePetitの開発PCに、sbgisen-ROS2開発のVS Code環境(フォーマッタ・linter連携・
+CubePetitの開発PCに、cube-petit-ROS2開発のVS Code環境(フォーマッタ・linter連携・
 ライセンスヘッダ挿入)を1コマンドで導入する。
 
 ```bash
@@ -9,7 +9,7 @@ cd ~/work/cube_petit_setup
 ```
 
 VS Code本体が先に必要(`setup_dev_tools.sh` またはWebアプリの「開発ツール」ステップで導入)。
-実行後、VS Codeの新しいウィンドウは自動的に **sbgisen-ROS2 プロファイル**で開く。
+実行後、VS Codeの新しいウィンドウは自動的に **cube-petit-ROS2 プロファイル**で開く。
 sudoは任意(`/opt/work/.github` のシンボリックリンク作成のみ。無ければ手動コマンドを案内)。
 
 ## 入るもの
@@ -31,7 +31,7 @@ sudoは任意(`/opt/work/.github` のシンボリックリンク作成のみ。�
 
 ## VS Codeの「プロファイル」機能との関係
 
-導入されるのはVS Code標準のプロファイル(Settings → Profiles に「sbgisen-ROS2」が現れる)。
+導入されるのはVS Code標準のプロファイル(Settings → Profiles に「cube-petit-ROS2」が現れる)。
 個人設定(デフォルトプロファイル)とは分離されるので、見た目や個人の好みはデフォルト側に
 自由に置いてよい。共有設定を更新したいときは `settings.json` を直してこのスクリプトを
 再実行する(既存のプロファイル設定は自動バックアップされる)。
