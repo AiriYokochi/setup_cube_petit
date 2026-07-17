@@ -45,20 +45,52 @@ repo_list() {
 
 # Fetch every repo and rewrite the cache. Runs the network calls, so this is
 # the slow path -- --bashrc only ever runs it in the background.
+#
+# Update detection is RELEASE-TAG based: an update exists when a v* tag newer
+# than HEAD (i.e. HEAD is its ancestor) has appeared; the tag's annotation
+# message is the user-facing release note. Repos with no v* tags at all fall
+# back to comparing against the branch upstream (@{u}).
 refresh_cache() {
   mkdir -p "$STATE_DIR"
   local entries=()
   while IFS= read -r repo; do
     [ -d "$repo/.git" ] || continue
-    timeout "$FETCH_TIMEOUT" git -C "$repo" fetch --quiet 2>/dev/null || true
-    # @{u} = the upstream of the current branch; repos without one are skipped.
-    local behind
-    behind="$(git -C "$repo" rev-list --count 'HEAD..@{u}' 2>/dev/null)" || continue
-    local commits
-    # One record per line downstream: fold the multi-line log into a single
-    # field with vertical-tab separators (split back on \x0b in python).
-    commits="$(git -C "$repo" log --oneline 'HEAD..@{u}' -10 2>/dev/null | tr '\n' '\v')"
-    entries+=("$repo"$'\t'"$behind"$'\t'"$commits")
+    timeout "$FETCH_TIMEOUT" git -C "$repo" fetch --tags --quiet 2>/dev/null || true
+
+    local mode="branch" tag="" behind="" notes="" commits="" head t
+    head="$(git -C "$repo" rev-parse HEAD 2>/dev/null)" || continue
+    # Newest-version-first over v* tags; the first one HEAD is an ancestor
+    # of (and not equal to) is the release to move to.
+    for t in $(git -C "$repo" tag --list 'v*' --sort=-v:refname 2>/dev/null); do
+      mode="tag"
+      if git -C "$repo" merge-base --is-ancestor HEAD "$t" 2>/dev/null \
+          && [ "$(git -C "$repo" rev-parse "$t^{commit}" 2>/dev/null)" != "$head" ]; then
+        tag="$t"
+        break
+      fi
+    done
+
+    if [ "$mode" = "tag" ]; then
+      if [ -n "$tag" ]; then
+        behind="$(git -C "$repo" rev-list --count "HEAD..$tag" 2>/dev/null || echo 0)"
+        # Annotation message = release note; \v-fold multi-line fields (split
+        # back on \x0b in python). Lightweight tags have no contents -> fall
+        # back to the commit summaries.
+        notes="$(git -C "$repo" tag -l --format='%(contents)' "$tag" 2>/dev/null | tr '\n' '\v')"
+        if [ -z "$(echo "$notes" | tr -d '\v[:space:]')" ]; then
+          notes=""
+          commits="$(git -C "$repo" log --oneline "HEAD..$tag" -10 2>/dev/null | tr '\n' '\v')"
+        fi
+      else
+        behind=0
+      fi
+    else
+      # No v* tags anywhere: branch-upstream fallback. Repos without an
+      # upstream are skipped entirely.
+      behind="$(git -C "$repo" rev-list --count 'HEAD..@{u}' 2>/dev/null)" || continue
+      commits="$(git -C "$repo" log --oneline 'HEAD..@{u}' -10 2>/dev/null | tr '\n' '\v')"
+    fi
+    entries+=("$repo"$'\t'"$mode"$'\t'"$behind"$'\t'"$tag"$'\t'"$notes"$'\t'"$commits")
   done < <(repo_list)
 
   # Assemble JSON with python3 (always present on Ubuntu 24.04). The records
@@ -75,13 +107,15 @@ repos = []
 for line in os.environ.get("RECORDS", "").split("\n"):
     if not line.strip():
         continue
-    path, behind, *rest = line.split("\t")
-    commits = (rest[0] if rest else "").split("\x0b")
+    path, mode, behind, tag, notes, commits = (line.split("\t") + [""] * 6)[:6]
     repos.append({
         "name": os.path.basename(path.rstrip("/")),
         "path": path,
+        "mode": mode or "branch",
         "behind": int(behind or 0),
-        "commits": [c for c in commits if c],
+        "tag": tag or None,
+        "notes": [n for n in notes.split("\x0b") if n.strip()],
+        "commits": [c for c in commits.split("\x0b") if c],
     })
 tmp = cache_path + ".tmp"
 with open(tmp, "w", encoding="utf-8") as f:
@@ -105,7 +139,16 @@ try:
 except (OSError, ValueError):
     sys.exit(0)
 for repo in data.get("repos", []):
-    if repo.get("behind", 0) > 0:
+    if repo.get("behind", 0) <= 0:
+        continue
+    if repo.get("tag"):
+        print(
+            f"\U0001f4e6 {repo['name']} に新しいリリース {repo['tag']} があります。"
+            f"{setup_repo}/webapp/run.sh を起動して、画面の「アップデート」を押してください"
+        )
+        for note in repo.get("notes", [])[:5]:
+            print(f"   {note}")
+    else:
         print(
             f"\U0001f4e6 {repo['name']} に更新が{repo['behind']}件あります。"
             f"{setup_repo}/webapp/run.sh を起動して、画面の「アップデート」を押してください"

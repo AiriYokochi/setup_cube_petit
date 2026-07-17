@@ -847,20 +847,29 @@ function renderCheckStep(id, step, el, actions, running) {
 
 // --- update banner (feature v1) ---------------------------------------------
 
-function commitList(commits) {
+// Release notes (the tag's annotation message) when available, commit
+// summaries otherwise.
+function changeList(status) {
+  const lines = (status.notes && status.notes.length) ? status.notes : (status.commits || []);
   const details = document.createElement("details");
   const summary = document.createElement("summary");
   summary.textContent = "変更内容を見る";
   details.appendChild(summary);
   const ul = document.createElement("ul");
   ul.className = "update-commits";
-  (commits || []).forEach((c) => {
+  lines.forEach((c) => {
     const li = document.createElement("li");
     li.textContent = c;
     ul.appendChild(li);
   });
   details.appendChild(ul);
   return details;
+}
+
+function updateHeadline(prefix, status) {
+  return status.tag
+    ? `${prefix}に新しいリリース ${status.tag} があります`
+    : `${prefix}に更新があります(${status.behind}件)`;
 }
 
 async function loadUpdates() {
@@ -887,10 +896,10 @@ function renderUpdateBanner() {
 
   const text = document.createElement("span");
   text.className = "update-banner-text";
-  text.textContent = `セットアップツールに更新があります(${self.behind}件)`;
+  text.textContent = updateHeadline("セットアップツール", self);
   banner.appendChild(text);
 
-  banner.appendChild(commitList(self.commits));
+  banner.appendChild(changeList(self));
 
   const status = document.createElement("span");
   status.className = "update-banner-status";
@@ -924,8 +933,10 @@ function renderRobotUpdate(id, el, actions) {
 
   const box = document.createElement("div");
   box.className = "warning-box";
-  box.textContent = `ロボットのソフトウェアに更新があります(${robot.behind}件)。「ロボットソフトをアップデート」を押すと、取得して再ビルドします。`;
-  box.appendChild(commitList(robot.commits));
+  box.textContent =
+    updateHeadline("ロボットのソフトウェア", robot) +
+    "。「ロボットソフトをアップデート」を押すと、取得して再ビルドします。";
+  box.appendChild(changeList(robot));
   el.insertBefore(box, actions);
 
   const btn = mkButton("primary", "ロボットソフトをアップデート", async () => {

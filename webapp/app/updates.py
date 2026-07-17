@@ -33,12 +33,7 @@ def _robot_repo(state: dict) -> Path:
     return engine.resolved_ros_ws(state) / "src" / "cube_petit_ros"
 
 
-async def _repo_status(repo: Path) -> Optional[dict]:
-    """{behind, commits[]} vs the current branch's upstream, or None when the
-    repo/upstream is missing or the fetch fails."""
-    if not (repo / ".git").exists():
-        return None
-
+def _git_runner(repo: Path):
     async def git(*args: str, timeout: int = FETCH_TIMEOUT) -> tuple[int, str]:
         proc = await asyncio.create_subprocess_exec(
             "git", "-C", str(repo), *args,
@@ -53,14 +48,66 @@ async def _repo_status(repo: Path) -> Optional[dict]:
             proc.kill()
             return 124, ""
         return proc.returncode or 0, out.decode(errors="replace").strip()
+    return git
 
-    await git("fetch", "--quiet")  # best effort; offline still reports cached refs
+
+async def _next_release_tag(git) -> tuple[bool, Optional[str]]:
+    """(any v* tags exist, the newest v* tag strictly ahead of HEAD or None).
+
+    "Ahead" = HEAD is an ancestor of the tag and the tag is not HEAD itself:
+    updates mean moving forward to a published release, never sideways."""
+    code, tags = await git("tag", "--list", "v*", "--sort=-v:refname", timeout=5)
+    tag_list = [t for t in tags.splitlines() if t.strip()] if code == 0 else []
+    if not tag_list:
+        return False, None
+    _, head = await git("rev-parse", "HEAD", timeout=5)
+    for tag in tag_list:
+        code, _ = await git("merge-base", "--is-ancestor", "HEAD", tag, timeout=5)
+        if code != 0:
+            continue
+        _, tag_commit = await git("rev-parse", f"{tag}^{{commit}}", timeout=5)
+        if tag_commit != head:
+            return True, tag
+    return True, None
+
+
+async def _repo_status(repo: Path) -> Optional[dict]:
+    """Release status of a repo.
+
+    mode "tag":    an update exists when a v* tag newer than HEAD appeared;
+                   the tag's annotation message is the release note shown to
+                   the user (commit summaries when the tag has none).
+    mode "branch": fallback for repos without any v* tags -- compare against
+                   the branch upstream as before.
+    Returns None when the repo is missing or (in branch mode) has no upstream.
+    """
+    if not (repo / ".git").exists():
+        return None
+    git = _git_runner(repo)
+
+    await git("fetch", "--tags", "--quiet")  # best effort; offline uses cached refs
+
+    has_tags, tag = await _next_release_tag(git)
+    if has_tags:
+        if tag is None:
+            return {"mode": "tag", "behind": 0, "tag": None, "notes": [], "commits": []}
+        _, behind = await git("rev-list", "--count", f"HEAD..{tag}", timeout=5)
+        _, contents = await git("tag", "-l", "--format=%(contents)", tag, timeout=5)
+        notes = [l for l in contents.splitlines() if l.strip()]
+        commits: list[str] = []
+        if not notes:
+            _, log = await git("log", "--oneline", f"HEAD..{tag}", "-10", timeout=5)
+            commits = [l for l in log.splitlines() if l.strip()]
+        return {"mode": "tag", "behind": int(behind or 0), "tag": tag,
+                "notes": notes, "commits": commits}
+
     code, behind = await git("rev-list", "--count", "HEAD..@{u}", timeout=5)
     if code != 0:
         return None
     code, log = await git("log", "--oneline", "HEAD..@{u}", "-10", timeout=5)
     commits = [l for l in log.splitlines() if l.strip()] if code == 0 else []
-    return {"behind": int(behind or 0), "commits": commits}
+    return {"mode": "branch", "behind": int(behind or 0), "tag": None,
+            "notes": [], "commits": commits}
 
 
 async def refresh() -> dict:
@@ -68,11 +115,15 @@ async def refresh() -> dict:
     if engine.MOCK:
         _cache.update({
             "checked": True,
-            "self": {"behind": 2, "commits": [
-                "abc1234 fix: sensor check hang on serial open",
-                "def5678 feat: update banner with commit summaries",
-            ]},
-            "robot": {"behind": 1, "commits": ["1a2b3c4 fix: rosdep keys"]},
+            # One repo per mode so both banner variants can be exercised:
+            # self = release tag with an annotation note, robot = tagless
+            # branch fallback.
+            "self": {"mode": "tag", "behind": 2, "tag": "v1.2.0", "notes": [
+                "センサ確認が固まる問題を修正しました",
+                "アップデート通知バナーを追加しました",
+            ], "commits": []},
+            "robot": {"mode": "branch", "behind": 1, "tag": None, "notes": [],
+                      "commits": ["1a2b3c4 fix: rosdep keys"]},
         })
         return dict(_cache)
 
@@ -90,24 +141,26 @@ def cached() -> dict:
 
 
 async def update_self() -> dict:
-    """git pull --ff-only this repo. The server keeps running the old code
-    until the user restarts run.sh -- deliberate for v1 (no self-restart)."""
+    """Advance this repo to the newest release: `git merge --ff-only <tag>`
+    when releases are tagged (moves exactly to the release point, even if
+    the branch has moved further), falling back to `git pull --ff-only` for
+    a tagless history. The server keeps running the old code until the user
+    restarts run.sh -- deliberate for v1 (no self-restart)."""
     if engine.MOCK:
-        return {"ok": True, "output": "[mock] git pull --ff-only: Already up to date (simulated update)."}
-    proc = await asyncio.create_subprocess_exec(
-        "git", "-C", str(engine.REPO_ROOT), "pull", "--ff-only",
-        stdin=asyncio.subprocess.DEVNULL,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.STDOUT,
-        env=engine._child_env(),
-    )
-    try:
-        out, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
-    except asyncio.TimeoutError:
-        proc.kill()
-        return {"ok": False, "output": "git pull がタイムアウトしました。ネットワークを確認してください。"}
-    text = out.decode(errors="replace").strip()
-    if proc.returncode != 0:
+        return {"ok": True, "output": "[mock] git merge --ff-only v1.2.0 (simulated update)."}
+
+    git = _git_runner(engine.REPO_ROOT)
+    await git("fetch", "--tags", "--quiet", timeout=30)
+    has_tags, tag = await _next_release_tag(git)
+    if has_tags and tag is None:
+        return {"ok": True, "output": "すでに最新のリリースです。"}
+    if tag:
+        code, text = await git("merge", "--ff-only", tag, timeout=60)
+    else:
+        code, text = await git("pull", "--ff-only", timeout=60)
+    if code == 124:
+        return {"ok": False, "output": "git の実行がタイムアウトしました。ネットワークを確認してください。"}
+    if code != 0:
         hint = (
             "ローカルに手作業の変更があると自動更新できません。"
             "ターミナルで git status を確認してください。"
@@ -122,10 +175,19 @@ async def run_robot_update(step_def: dict, state: dict) -> engine.StepRun:
     itself (so the log streams over SSE and success marks the step done)."""
     repo = _robot_repo(state)
     build = f"bash {shlex.quote(str(engine.script_path(step_def['script'])))} --build-only"
-    real_cmd = (
-        f"git -C {shlex.quote(str(repo))} pull --ff-only\n"
-        f"{build}"
-    )
+    # Same release semantics as update_self(): move exactly to the newest
+    # tag when the repo uses release tags, plain pull otherwise.
+    tag = None
+    if not engine.MOCK and (repo / ".git").exists():
+        _, tag = await _next_release_tag(_git_runner(repo))
+    if tag:
+        pull = (
+            f"git -C {shlex.quote(str(repo))} fetch --tags --quiet\n"
+            f"git -C {shlex.quote(str(repo))} merge --ff-only {shlex.quote(tag)}"
+        )
+    else:
+        pull = f"git -C {shlex.quote(str(repo))} pull --ff-only"
+    real_cmd = f"{pull}\n{build}"
     cmd = engine._cmd_or_mock(real_cmd, "robot update: git pull + setup_ros.bash --build-only", 3)
     extra_env = engine.ros_ws_env(state)
     run = await engine.start_command(step_def["id"], cmd, cwd=engine.REPO_ROOT, extra_env=extra_env)
