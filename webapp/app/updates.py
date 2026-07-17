@@ -144,16 +144,21 @@ async def update_self() -> dict:
     """Advance this repo to the newest release: `git merge --ff-only <tag>`
     when releases are tagged (moves exactly to the release point, even if
     the branch has moved further), falling back to `git pull --ff-only` for
-    a tagless history. The server keeps running the old code until the user
-    restarts run.sh -- deliberate for v1 (no self-restart)."""
+    a tagless history. `updated: True` means new code is on disk -- the
+    /api/updates/self endpoint then exits the server with code 42 so run.sh's
+    supervisor loop restarts it on the new code."""
     if engine.MOCK:
-        return {"ok": True, "output": "[mock] git merge --ff-only v1.2.0 (simulated update)."}
+        return {
+            "ok": True,
+            "updated": True,
+            "output": "[mock] git merge --ff-only v1.2.0 (simulated update).",
+        }
 
     git = _git_runner(engine.REPO_ROOT)
     await git("fetch", "--tags", "--quiet", timeout=30)
     has_tags, tag = await _next_release_tag(git)
     if has_tags and tag is None:
-        return {"ok": True, "output": "すでに最新のリリースです。"}
+        return {"ok": True, "updated": False, "output": "すでに最新のリリースです。"}
     if tag:
         code, text = await git("merge", "--ff-only", tag, timeout=60)
     else:
@@ -167,7 +172,7 @@ async def update_self() -> dict:
         )
         return {"ok": False, "output": f"{text}\n{hint}"}
     await refresh()
-    return {"ok": True, "output": text}
+    return {"ok": True, "updated": True, "output": text}
 
 
 async def run_robot_update(step_def: dict, state: dict) -> engine.StepRun:

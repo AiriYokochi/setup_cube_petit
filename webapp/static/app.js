@@ -911,8 +911,11 @@ function renderUpdateBanner() {
     status.textContent = "更新中...";
     try {
       const r = await api("/api/updates/self", { method: "POST" });
-      if (r.ok) {
-        status.textContent = "アップデートしました。run.sh を一度止めて(Ctrl+C)、もう一度起動してください。";
+      if (r.ok && r.restarting) {
+        btn.remove();
+        await waitForRestart(status);
+      } else if (r.ok) {
+        status.textContent = r.output || "すでに最新のリリースです。";
         btn.remove();
       } else {
         status.textContent = "更新できませんでした: " + (r.output || "");
@@ -925,6 +928,27 @@ function renderUpdateBanner() {
   });
   banner.appendChild(btn);
   banner.appendChild(status);
+}
+
+// After a self-update the server exits and run.sh's supervisor loop starts
+// it again on the new code. Wait out the gap, then reload onto the new UI.
+async function waitForRestart(status) {
+  status.textContent = "アップデートを適用しています。自動で再起動します…";
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  await sleep(3000); // let the old server actually exit first
+  for (let i = 0; i < 60; i++) {
+    try {
+      await api("/api/state");
+      status.textContent = "再起動しました。画面を読み込み直します…";
+      location.reload();
+      return;
+    } catch (e) {
+      // server still down -- keep waiting
+    }
+    await sleep(1000);
+  }
+  status.textContent =
+    "自動再起動を確認できませんでした。ターミナルで run.sh を手動で起動し直してください。";
 }
 
 // The ros_setup step gets its own "update the robot software" action when

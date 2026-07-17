@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import platform
 import re
+import shlex
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -591,7 +595,17 @@ async def refresh_updates():
 
 @app.post("/api/updates/self")
 async def update_self():
-    return await updates.update_self()
+    result = await updates.update_self()
+    if result.get("ok") and result.get("updated"):
+        # New code is on disk. Tell the frontend a restart is coming, give
+        # the response ~1.5s to reach the browser, then exit with the magic
+        # code run.sh's supervisor loop restarts on. Mock never exits (there
+        # is no supervisor in tests) -- the frontend still exercises its
+        # poll-and-reload path against the still-running server.
+        result["restarting"] = True
+        if not engine.MOCK:
+            asyncio.get_event_loop().call_later(1.5, os._exit, 42)
+    return result
 
 
 @app.post("/api/updates/robot")
