@@ -101,3 +101,36 @@ steps:
     needs_sudo: false
     skippable: false
     requires_reboot: true
+
+  - id: devices
+    title_ja: "6. デバイス設定"
+    description_ja: |
+      機体にUSB機器(IMU・CANケーブル・LiDAR・RealSense・SoundBlaster)を接続してから実行してください。
+      それぞれの項目はON/OFFで選べます(setup_devices.bash を実行します)。
+      RealSenseはソースからビルドするため、ONの場合は10分以上かかることがあります。
+    type: toggle_script
+    script: setup_devices.bash
+    needs_sudo: true
+    skippable: false
+    requires_reboot: false
+    inputs:
+      - id: wifi
+        label_ja: "Wi-Fi優先設定"
+        type: bool
+        default: true
+      - id: audio
+        label_ja: "スピーカー(SoundBlaster)"
+        type: bool
+        default: true
+      - id: imu
+        label_ja: "IMU"
+        type: bool
+        default: true
+      - id: can
+        label_ja: "CAN(モーター通信)"
+        type: bool
+        default: true
+      - id: realsense
+        label_ja: "RealSense(カメラ、ビルドに10分以上)"
+        type: bool
+        default: true
