@@ -35,6 +35,19 @@ source setup_ros.bash
 - `setup_ros.bash`: sudoパスワードや、Enterキーを求められる場面があります。
 - **完了後、再起動してください**(dialout/videoグループの権限を反映するため。次のステップに進む前に必須です)。
 
+再起動後、`ROS_DOMAIN_ID`・`RMW_IMPLEMENTATION`・CycloneDDS設定・起動用エイリアス(01_BRING など)を
+`~/.bashrc` に設定します(`setup_ros.bash` はもうこれをやりません。Issue #5)。
+
+```bash
+ROBOT_NAMESPACE=cube_petit_yellow ROS_DOMAIN_ID=94 ./setup_bashrc.bash
+source ~/.bashrc
+```
+
+- `ROBOT_NAMESPACE` はステップ①で決めた個体名、`ROS_DOMAIN_ID` は複数台を同じ場所で
+  動かす場合は個体ごとに変えてください(どちらも未指定だとエラーで終了します)。
+- 会話機能を使うなら `OPENAI_API_KEY=sk-... ` も付けて実行するか、あとで
+  `~/.bashrc` を直接編集してください。
+
 ### ③ デバイスをセットアップ(再起動後)
 
 ```bash
@@ -181,5 +194,6 @@ tmuxが無い環境では、手動実行用のコマンドを表示して終了�
 | --- | --- |
 | `setup_pc.bash` | 壁紙・Chrome導入・サイドバー非表示・電源設定など |
 | `setup_dev_tools.sh` | (任意)GitKraken・VSCodeの導入 |
-| `setup_ros.bash` | ROS2 Jazzyと`cube_petit_ros`リポジトリの導入 |
+| `setup_ros.bash` | ROS2 Jazzyと`cube_petit_ros`リポジトリの導入(`--build-only`でビルドだけやり直し、`CUBE_PETIT_ROS_WS`で別ワークスペースにも導入可) |
+| `setup_bashrc.bash` | `ROS_DOMAIN_ID`・CycloneDDS設定・起動エイリアスを`~/.bashrc`に設定 |
 | `setup_devices.bash` | Wifi・Audio・IMU・CAN・Realsenseの設定 |

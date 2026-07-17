@@ -33,6 +33,7 @@ if confirm "Setup Default Audio (SoundBlaster auto set)?"; then
   {
     echo -e '\e[1;32m == Setup Default Audio == \e[m'
     sudo apt install -y pulseaudio-utils
+    sudo install -o root -g root -m 755 services/set_soundblaster.sh /usr/local/bin/set_soundblaster.sh
     mkdir -p ~/.config/systemd/user/
     cp services/set-soundblaster.service ~/.config/systemd/user/
     systemctl --user daemon-reload

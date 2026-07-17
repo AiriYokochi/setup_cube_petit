@@ -20,8 +20,20 @@ echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl
   | sudo tee /etc/apt/sources.list.d/google-chrome.list
 sudo apt update
 sudo apt install -y google-chrome-stable
-# remove keyring for open Chrome
-rm -f ~/.local/share/keyrings/login.keyring
+# With auto-login enabled the GNOME keyring is never unlocked by a login
+# password, so Chrome prompts to unlock/create a keyring at first launch.
+# Ship a passwordless plaintext default keyring instead: no prompt, and the
+# robot stores no secrets in it anyway. (Just deleting login.keyring is not
+# enough -- Chrome then prompts to create a new one.)
+KEYRING_DIR="$HOME/.local/share/keyrings"
+mkdir -p "$KEYRING_DIR"
+chmod 700 "$KEYRING_DIR"
+if [ ! -f "$KEYRING_DIR/Default_keyring.keyring" ]; then
+  printf '[keyring]\ndisplay-name=Default keyring\nctime=0\nmtime=0\nlock-on-idle=false\nlock-after=false\n' \
+    > "$KEYRING_DIR/Default_keyring.keyring"
+fi
+printf 'Default_keyring' > "$KEYRING_DIR/default"
+rm -f "$KEYRING_DIR/login.keyring"
 
 echo -e '\e[1;31m == Setup Udev rules == \e[m'
 # Udevs

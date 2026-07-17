@@ -11,16 +11,26 @@ DEVICES=(
 )
 # Set LiDAR dev path
 LIDAR_DEV="/dev/ttyLD06-19"
-LIDAR_TIMEOUT=0.1
+# 0.1s was too short: the read frequently caught 0 bytes even when the
+# LiDAR was sending data, causing a false NG. 2s reliably captures at
+# least one frame on real hardware.
+LIDAR_TIMEOUT=2
 # Set IMU dev path
 IMU_DEV="/dev/ttyWitMotion"
-IMU_TIMEOUT=0.1
+IMU_TIMEOUT=2
 
 echo "=== /dev device check ==="
 
 for dev in "${DEVICES[@]}"; do
   if ls /dev | grep -q "^${dev}$"; then
     echo -e "${GREEN}[OK]${NC} /dev/${dev} is found"
+  elif [[ "$dev" == "ttyCANable" ]] && ip link show can0 &>/dev/null; then
+    # On real hardware, once can@ttyCANable (slcand) has claimed the serial
+    # port and brought can0 up, the /dev/ttyCANable symlink normally
+    # disappears -- that's expected slcand behavior, not a failure. Treat
+    # "can0 exists" as proof the CAN adapter is fine even without the
+    # symlink, instead of false-NG'ing a machine that is working correctly.
+    echo -e "${GREEN}[OK]${NC} /dev/${dev} is not found, but can0 is up (slcand is holding the port, so no symlink is expected)"
   else
     echo -e "${RED}[NG]${NC} /dev/${dev} is not found"
   fi
@@ -35,7 +45,7 @@ if ifconfig can0 &>/dev/null; then
   if [[ -n "$RX_PACKETS" && "$RX_PACKETS" -gt 0 ]]; then
     echo -e "${GREEN}[OK]${NC} can0 found, 、RX packets = ${RX_PACKETS}"
   else
-    echo -e "${RED}[NG]${NC} can0 found, but RX packets is 0"
+    echo -e "${RED}[NG]${NC} can0 found, but RX packets is 0 (if the robot body itself is powered off, RX stays 0 even though CAN is wired correctly)"
   fi
 else
   echo -e "${RED}[NG]${NC} No can0"
@@ -100,6 +110,18 @@ echo ""
 echo "=== LiDAR Data Check ==="
 
 if [[ -e "$LIDAR_DEV" ]]; then
+  # Put the tty into raw mode before reading. Baud rate is intentionally
+  # left untouched (existing setting is trusted).
+  #
+  # On real hardware, plain `stty -F "$LIDAR_DEV" ...` can block forever:
+  # opening a serial device without `clocal` waits for carrier detect
+  # (CLOCAL unset), and if nothing ever asserts carrier the open() call
+  # inside stty never returns -- the surrounding `timeout` on the `cat`
+  # below is useless here because it never even gets that far. Wrapping
+  # the stty call itself in `timeout` and adding `clocal` fixes both: once
+  # this succeeds, later opens of the same device no longer wait for
+  # carrier either.
+  timeout "${LIDAR_TIMEOUT}" stty -F "$LIDAR_DEV" raw -echo clocal 2>/dev/null || true
   BYTE_COUNT=$(timeout ${LIDAR_TIMEOUT} cat "$LIDAR_DEV" 2>/dev/null | head -c 256 | wc -c)
 
   if [[ "$BYTE_COUNT" -gt 0 ]]; then
@@ -116,6 +138,12 @@ echo "=== IMU Data Check ==="
 
 
 if [[ -e "$IMU_DEV" ]]; then
+  # Put the tty into raw mode before reading. Baud rate is intentionally
+  # left untouched (9600 already works on real hardware).
+  # See the LiDAR check above for why this stty call itself needs `timeout`
+  # and `clocal`: without them, opening the device can hang forever waiting
+  # for carrier detect, and the whole check gets stuck at "running".
+  timeout "${IMU_TIMEOUT}" stty -F "$IMU_DEV" raw -echo clocal 2>/dev/null || true
   BYTE_COUNT=$(timeout ${IMU_TIMEOUT} cat "$IMU_DEV" 2>/dev/null | head -c 256 | wc -c)
 
   if [[ "$BYTE_COUNT" -gt 0 ]]; then
@@ -145,8 +173,28 @@ echo "=== Bluetooth Controller Check ==="
 if ! command -v bluetoothctl &>/dev/null; then
   echo -e "${RED}[NG]${NC} bluetoothctl not found"
 else
-  # Get connected Bluetooth devices
-  CONNECTED_BT_DEVICES=$(bluetoothctl info | grep "Connected: yes" -B 1)
+  # `bluetoothctl info | grep "Connected: yes" -B 1` (the previous approach)
+  # is broken: -B 1 grabs the line right above "Connected: yes", which is
+  # always "Blocked: no" in bluetoothctl's output, never the device Name.
+  # It also only ever looked at whatever single device `bluetoothctl info`
+  # (no argument) defaults to.
+  #
+  # Instead, list every currently-connected device as "Device <MAC> <Name>"
+  # lines and match the controller regex against the Name portion.
+  CONNECTED_BT_DEVICES=$(bluetoothctl devices Connected 2>/dev/null)
+
+  # Older BlueZ versions don't support the "Connected" filter argument to
+  # `devices`, so fall back to checking each known device individually.
+  if [[ -z "$CONNECTED_BT_DEVICES" ]]; then
+    while read -r _ mac _; do
+      [[ -z "$mac" ]] && continue
+      INFO=$(bluetoothctl info "$mac" 2>/dev/null)
+      if echo "$INFO" | grep -q "Connected: yes"; then
+        NAME=$(echo "$INFO" | grep "Name:" | head -n 1 | sed 's/^[[:space:]]*Name:[[:space:]]*//')
+        CONNECTED_BT_DEVICES+=$'\n'"Device ${mac} ${NAME}"
+      fi
+    done < <(bluetoothctl devices 2>/dev/null)
+  fi
 
   if [[ -z "$CONNECTED_BT_DEVICES" ]]; then
     echo -e "${RED}[NG]${NC} No Bluetooth devices connected"

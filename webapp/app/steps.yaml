@@ -78,13 +78,17 @@ steps:
     requires_reboot: true
     precheck:
       message_ja: |
-        以前の作業の跡が見つかりました。このまま実行すると、既存フォルダがあるために
-        途中で失敗します。どちらかを選んでください。
+        ~/ros に以前の作業の跡(既存のROSワークスペースや、cube_petit_ros のソース一式など)
+        が見つかりました。状況に応じて、下から選んでください。
       paths:
         - path: "ros/src/cube_petit_ros"
           label_ja: "ROSワークスペース内 cube_petit_ros"
         - path: "work/ripvcs"
           label_ja: "ripvcs (ビルド支援ツール)"
+      # skip / clean are always offered when the precheck fires. build_only /
+      # separate_ws are added dynamically by engine.precheck_status() only
+      # when they actually apply (source cloned but not built / ~/ros exists)
+      # -- see engine.py for that logic.
       choices:
         - id: skip
           label_ja: "このステップをスキップする(すでに導入済みとして次へ進む)"
@@ -101,3 +105,113 @@ steps:
     needs_sudo: false
     skippable: false
     requires_reboot: true
+
+  - id: env_setup
+    title_ja: "6. 環境設定"
+    description_ja: |
+      ROSの通信設定(ROS_DOMAIN_ID・RMW/CycloneDDS)と、よく使うコマンドのエイリアス
+      (01_BRING など)を ~/.bashrc にまとめて書き込みます(setup_bashrc.bash を実行します)。
+      あわせて、ROS 2通信(CycloneDDS)の推奨設定ファイルもこの機体に配布します。
+    type: script
+    script: setup_bashrc.bash
+    needs_sudo: true
+    skippable: false
+    requires_reboot: false
+    inputs:
+      - id: ros_domain_id
+        label_ja: "ROS_DOMAIN_ID"
+        type: text
+        default: "94"
+        required: true
+        pattern: "^[0-9]{1,3}$"
+        help_ja: "複数台を同じ場所で動かす場合は個体ごとに変えてください。"
+        error_ja: "ROS_DOMAIN_ID は0〜999の半角数字で入力してください。"
+      - id: openai_api_key
+        label_ja: "OpenAI APIキー(任意)"
+        type: text
+        default: ""
+        required: false
+        help_ja: "AI会話機能に必要です。あとから ~/.bashrc でも設定できます。"
+
+  - id: devices
+    title_ja: "7. デバイス設定"
+    description_ja: |
+      機体にUSB機器(IMU・CANケーブル・LiDAR・RealSense・SoundBlaster)を接続してから実行してください。
+      それぞれの項目はON/OFFで選べます(setup_devices.bash を実行します)。
+      RealSenseはソースからビルドするため、ONの場合は10分以上かかることがあります。
+    type: toggle_script
+    script: setup_devices.bash
+    needs_sudo: true
+    skippable: false
+    requires_reboot: false
+    inputs:
+      - id: wifi
+        label_ja: "Wi-Fi優先設定"
+        type: bool
+        default: true
+      - id: audio
+        label_ja: "スピーカー(SoundBlaster)"
+        type: bool
+        default: true
+      - id: imu
+        label_ja: "IMU"
+        type: bool
+        default: true
+      - id: can
+        label_ja: "CAN(モーター通信)"
+        type: bool
+        default: true
+      - id: realsense
+        label_ja: "RealSense(カメラ、ビルドに10分以上)"
+        type: bool
+        default: true
+
+  - id: bt_controller
+    title_ja: "8. Bluetoothコントローラ接続"
+    description_ja: |
+      ロボットを操作するコントローラをBluetoothでペアリングします。
+      コントローラをペアリングモードにしてください(ボタン長押し)。
+      準備ができたら「スキャン」を押すと、近くのBluetooth機器が一覧表示されます。
+      目的のコントローラの「接続」を押すとペアリング・接続まで自動で行います。
+      Tips: スキャン結果には「Wireless Controller」という名前で出てくることが
+      多いです(PS系コントローラの標準名)。それらしい名前が見当たらないときは、
+      まずこれを探してみてください。
+    type: bluetooth
+    needs_sudo: false
+    skippable: true
+    requires_reboot: false
+
+  - id: device_check
+    title_ja: "9. センサ接続確認"
+    description_ja: |
+      IMU・CAN・LiDAR・Wi-Fi・SoundBlaster・RealSense・Bluetoothコントローラが
+      正しく認識されているか、まとめて確認します(udev_check.sh を実行します)。
+      NGの項目があっても、この画面から先に進めます。あとで機器を接続し直してから
+      「もう一度チェック」を押せば再確認できます。
+    type: check
+    script: shell_scripts/udev_check.sh
+    needs_sudo: false
+    skippable: false
+    requires_reboot: false
+
+# Shown once every step above is done/skipped, as a celebration screen with
+# "what do you want to do next" buttons. This is data (not code) on purpose,
+# so the labels/links can be edited later without touching app.js/main.py.
+completion:
+  title_ja: "🎉 セットアップ完了です!"
+  subtitle_ja: "よきキューブプチライフを!"
+  next_actions:
+    - id: try_it
+      label_ja: "とりあえず動かしてみたい"
+      # TODO: リンク先はありさんが確定する
+      url: "https://sbgisen.github.io/cube_petit_portal/"
+    - id: learn_ros
+      label_ja: "ROSの勉強をしたい"
+      url: "https://docs.ros.org/en/jazzy/Tutorials.html"
+    - id: learn_internals
+      label_ja: "キューブプチの中身を知りたい"
+      url: "https://github.com/sbgisen/cube_petit_ros"
+    - id: consult
+      label_ja: "何がしたいか相談したい"
+      # TODO: リンク先はありさんが確定する
+      url: "https://sbgisen.github.io/cube_petit_portal/"

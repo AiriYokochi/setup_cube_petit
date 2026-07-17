@@ -19,14 +19,30 @@ cd ~/work/cube_petit_setup
 `./webapp/run.sh` を実行してください。どこまで終わったかは自動的に記録されているので、
 続きから再開できます(進捗は `~/.cube_petit_setup/state.json` に保存されます)。
 
-**最初からやり直したいとき**は、run.sh を Ctrl+C で止めてから:
+**途中のステップからやり直したいとき / 最初からやり直したいとき**は、run.sh を
+Ctrl+C で止めてから:
 
 ```bash
 ./webapp/reset.sh
 ```
 
-進行状態の記録だけを消します(インストール済みのものは消えません。各ステップは
-再実行しても安全です)。そのあと `./webapp/run.sh` を起動し直してください。
+を実行すると、ステップ一覧が番号付きで表示され、「どのステップからやり直しますか?
+[番号 / a=全部 / q=中止]」と聞かれます。番号を選ぶと、そのステップ**以降**の実行記録
+だけを消して未実行に戻します(それより前の完了記録と、入力欄に入れた値は残るので、
+再実行時にプリフィルされます)。`a` を選ぶ(または `--all` / 旧来の `-f`)と、進行状態を
+全部消して最初からやり直せます。
+
+スクリプトを止めずに直接指定したい場合は、非対話フラグも使えます:
+
+```bash
+./webapp/reset.sh --from devices   # 「7. デバイス設定」以降だけリセット
+./webapp/reset.sh --all            # 全部リセット(確認なし)
+```
+
+いずれの場合も、消えるのはウィザード自身の進行記録(`~/.cube_petit_setup/state.json`
+と `logs/`)だけです。インストール済みのものが消えるわけではなく、各ステップは
+再実行しても安全です。リセット後は `./webapp/run.sh` を起動し直して、ブラウザを
+リロードしてください(Ctrl+Shift+R)。
 
 ## 開発者向け: mockモード
 
@@ -43,8 +59,10 @@ mockモードでは、すべてのコマンド実行が「実行するコマン�
 限定、実フォルダには一切触れないサンドボックス `~/.cube_petit_setup/mock_home/` を使います)。
 
 ```bash
-curl -X POST http://localhost:8760/api/debug/mock/seed/ros_setup   # 既存フォルダを作る
-curl -X POST http://localhost:8760/api/debug/mock/clear/ros_setup  # 消す
+curl -X POST http://localhost:8760/api/debug/mock/seed/ros_setup            # cube_petit_ros未ビルド + ripvcs(全選択肢が出る)
+curl -X POST http://localhost:8760/api/debug/mock/seed_bare_ros/ros_setup   # 無関係の空の ~/ros のみ(別ワークスペースのみ出る)
+curl -X POST http://localhost:8760/api/debug/mock/seed_built/ros_setup     # ビルド済み(ビルドだけやり直す、は出ない)
+curl -X POST http://localhost:8760/api/debug/mock/clear/ros_setup          # すべてのフィクスチャを消す
 ```
 
 ## 構成
@@ -70,7 +88,25 @@ webapp/
 4. ROS導入 (`setup_ros.bash`、既存フォルダ検知でスキップ/削除して再実行を選択可能)
 5. 再起動誘導(再起動後にもう一度 `run.sh` を実行すると続きから再開)
 
-デバイス設定・動作確認・petit導入(Phase 2)、自動起動設定(Phase 3)は今後の対応です。
+## Phase 2 の対象ステップ
+
+6. 環境設定 (`setup_bashrc.bash`。ROS_DOMAIN_ID・RMW_IMPLEMENTATION・CycloneDDS設定
+   (`config/cyclonedds.xml` の配布 + sysctl での受信バッファ拡大)と、01_BRING などの
+   起動エイリアスを ~/.bashrc にマーカー付きブロックで冪等に書き込む。個体名は
+   ステップ1の保存値をエンジンが自動で渡す)
+7. デバイス設定 (`setup_devices.bash`。Wi-Fi優先設定/スピーカー(SoundBlaster)/IMU/CAN/RealSense
+   をON/OFFで選択。既存の toggle_script 型をそのまま流用)
+8. Bluetoothコントローラ接続(`bluetoothctl` をラップした新規API。スキャン→一覧→接続。
+   sudo不要)
+9. センサ接続確認(`shell_scripts/udev_check.sh` を実行し、ログの `[OK]`/`[NG]` 行を
+   パースして色付き一覧表示。NGがあっても先に進める)
+
+ROSワークスペースについて: ステップ4(ROS導入)は既存の作業跡を検知すると、状況に応じて
+「スキップ」「削除してやり直す」に加え、「ソースはあるのでビルドだけやり直す」
+(`setup_ros.bash --build-only`)・「既存の ~/ros を残して別ワークスペース
+cube_petit_ros2_ws を新規作成」(`CUBE_PETIT_ROS_WS` 環境変数)を動的に提示する。
+
+petit導入・自動起動設定(Phase 3)は今後の対応です。
 詳細は `docs/cube_petit_setup_survey.md` と `plans/setup_webapp_plan.md`
 (orange_petit_claude リポジトリ)を参照してください。
 
