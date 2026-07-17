@@ -208,6 +208,35 @@ def _parse_check_log(raw_log: str) -> list[dict]:
     return items
 
 
+# --- ROS_DOMAIN_ID suggestion ------------------------------------------------
+
+def _suggested_domain_id(robot_namespace: Optional[str]) -> str:
+    """Deterministic per-robot ROS_DOMAIN_ID suggestion, so two robots set up
+    with defaults never share a domain (orange's face once showed up on
+    yellow -- both were on 94). orange keeps its long-standing 94; every
+    other name maps into 95-123 via a stable hash of the name."""
+    import zlib
+
+    if not robot_namespace:
+        return "94"
+    if robot_namespace == "cube_petit_orange":
+        return "94"
+    return str(95 + zlib.crc32(robot_namespace.encode("utf-8")) % 29)
+
+
+def _env_setup_inputs(state: dict, input_defs: list[dict]) -> list[dict]:
+    """env_setup's input definitions with the ros_domain_id default replaced
+    by the per-robot suggestion. A value the user already saved always wins
+    (the frontend prefers saved inputs over defaults), so existing machines
+    never see their number change."""
+    out = []
+    for d in input_defs:
+        if d["id"] == "ros_domain_id":
+            d = {**d, "default": _suggested_domain_id(state.get("robot_namespace"))}
+        out.append(d)
+    return out
+
+
 # --- pages ---------------------------------------------------------------
 
 @app.get("/")
@@ -223,16 +252,17 @@ async def get_state():
     steps_out = []
     for step_def in STEPS:
         st = state_mod.get_step_status(state, step_def["id"])
-        steps_out.append(
-            {
-                **step_def,
-                "status": st.get("status", "pending"),
-                "exit_code": st.get("exit_code"),
-                # The step ran at an older commit and its script has changed
-                # since -> surface a "re-run recommended" badge.
-                "needs_rerun": updates.needs_rerun(step_def, st),
-            }
-        )
+        step_out = {
+            **step_def,
+            "status": st.get("status", "pending"),
+            "exit_code": st.get("exit_code"),
+            # The step ran at an older commit and its script has changed
+            # since -> surface a "re-run recommended" badge.
+            "needs_rerun": updates.needs_rerun(step_def, st),
+        }
+        if step_def["id"] == "env_setup":
+            step_out["inputs"] = _env_setup_inputs(state, step_def.get("inputs", []))
+        steps_out.append(step_out)
     all_done = bool(steps_out) and all(s["status"] in ("done", "skipped") for s in steps_out)
     return {
         "robot_namespace": state.get("robot_namespace"),
