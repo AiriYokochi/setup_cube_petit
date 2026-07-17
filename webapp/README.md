@@ -43,8 +43,10 @@ mockモードでは、すべてのコマンド実行が「実行するコマン�
 限定、実フォルダには一切触れないサンドボックス `~/.cube_petit_setup/mock_home/` を使います)。
 
 ```bash
-curl -X POST http://localhost:8760/api/debug/mock/seed/ros_setup   # 既存フォルダを作る
-curl -X POST http://localhost:8760/api/debug/mock/clear/ros_setup  # 消す
+curl -X POST http://localhost:8760/api/debug/mock/seed/ros_setup            # cube_petit_ros未ビルド + ripvcs(全選択肢が出る)
+curl -X POST http://localhost:8760/api/debug/mock/seed_bare_ros/ros_setup   # 無関係の空の ~/ros のみ(別ワークスペースのみ出る)
+curl -X POST http://localhost:8760/api/debug/mock/seed_built/ros_setup     # ビルド済み(ビルドだけやり直す、は出ない)
+curl -X POST http://localhost:8760/api/debug/mock/clear/ros_setup          # すべてのフィクスチャを消す
 ```
 
 ## 構成
@@ -78,6 +80,11 @@ webapp/
    sudo不要)
 8. センサ接続確認(`shell_scripts/udev_check.sh` を実行し、ログの `[OK]`/`[NG]` 行を
    パースして色付き一覧表示。NGがあっても先に進める)
+
+ROSワークスペースについて: ステップ4(ROS導入)は既存の作業跡を検知すると、状況に応じて
+「スキップ」「削除してやり直す」に加え、「ソースはあるのでビルドだけやり直す」
+(`setup_ros.bash --build-only`)・「既存の ~/ros を残して別ワークスペース
+cube_petit_ros2_ws を新規作成」(`CUBE_PETIT_ROS_WS` 環境変数)を動的に提示する。
 
 petit導入・自動起動設定(Phase 3)は今後の対応です。
 詳細は `docs/cube_petit_setup_survey.md` と `plans/setup_webapp_plan.md`

@@ -187,7 +187,8 @@ async def get_precheck(step_id: str):
     step_def = _get_step_or_404(step_id)
     if not step_def.get("precheck"):
         return {"needed": False}
-    return engine.precheck_status(step_def)
+    state = state_mod.load_state()
+    return engine.precheck_status(step_def, state)
 
 
 @app.post("/api/steps/{step_id}/precheck/resolve")
@@ -197,14 +198,31 @@ async def resolve_precheck(step_id: str, body: PrecheckResolveBody):
     if not precheck:
         raise HTTPException(400, "this step has no precheck")
 
-    valid_ids = {c["id"] for c in precheck["choices"]}
+    state = state_mod.load_state()
+    pre = engine.precheck_status(step_def, state)
+    valid_ids = {c["id"] for c in pre["choices"]}
     if body.choice not in valid_ids:
         raise HTTPException(400, f"invalid choice, expected one of {sorted(valid_ids)}")
 
     if body.choice == "skip":
-        state = state_mod.load_state()
         state_mod.set_step_status(state, step_id, status="skipped")
         return {"status": "skipped"}
+
+    if body.choice == "separate_ws":
+        # No command to run: just record the choice. The next normal "run"
+        # of this step will pick up CUBE_PETIT_ROS_WS via engine.ros_ws_env(),
+        # and precheck_status() will report needed=False from then on.
+        state["ros_ws"] = "separate"
+        state_mod.save_state(state)
+        return {"status": "ws_selected"}
+
+    if body.choice == "build_only":
+        if engine.is_running(step_id):
+            raise HTTPException(409, "step is already running")
+        state_mod.set_step_status(state, step_id, status="running", exit_code=None)
+        run = await engine.run_build_only(step_def, state)
+        asyncio.create_task(_watch_run(step_id, run))
+        return {"status": "running", "run_key": step_id}
 
     # choice == "clean"
     run_key = f"{step_id}__precheck"
@@ -230,12 +248,12 @@ async def run_step(step_id: str, body: RunBody = Body(default=RunBody())):
     inputs = state["inputs"].get(step_id, {})
 
     if step_def.get("precheck"):
-        pre = engine.precheck_status(step_def)
+        pre = engine.precheck_status(step_def, state)
         if pre["needed"]:
             raise HTTPException(409, detail={"message": "precheck_required", "precheck": pre})
 
     state_mod.set_step_status(state, step_id, status="running", exit_code=None)
-    run = await engine.run_step(step_def, inputs)
+    run = await engine.run_step(step_def, inputs, state)
     asyncio.create_task(_watch_run(step_id, run))
     return {"status": "started", "run_key": step_id}
 
@@ -341,13 +359,37 @@ async def stream_run(run_key: str):
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
-# --- mock-only debug helpers (exercise the precheck branch deterministically) --
+# --- mock-only debug helpers (exercise the precheck branches deterministically) --
+#
+# Three seed shapes for the ros_setup precheck, matching engine.precheck_status():
+#   seed             -- cube_petit_ros cloned but not built (+ ripvcs): all four
+#                        choices (skip/clean/build_only/separate_ws) apply.
+#   seed_bare_ros    -- an unrelated, empty $HOME/ros: only separate_ws applies
+#                        (besides the always-on skip/clean).
+#   seed_built       -- like seed, but already built: build_only must NOT appear.
 
 @app.post("/api/debug/mock/seed/{step_id}")
 async def debug_seed(step_id: str):
     if not engine.MOCK:
         raise HTTPException(400, "only available with --mock")
     engine.mock_seed_existing(_get_step_or_404(step_id))
+    return {"status": "seeded"}
+
+
+@app.post("/api/debug/mock/seed_bare_ros/{step_id}")
+async def debug_seed_bare_ros(step_id: str):
+    if not engine.MOCK:
+        raise HTTPException(400, "only available with --mock")
+    _get_step_or_404(step_id)  # validate step_id exists, even though unused
+    engine.mock_seed_bare_ros()
+    return {"status": "seeded"}
+
+
+@app.post("/api/debug/mock/seed_built/{step_id}")
+async def debug_seed_built(step_id: str):
+    if not engine.MOCK:
+        raise HTTPException(400, "only available with --mock")
+    engine.mock_seed_built(_get_step_or_404(step_id))
     return {"status": "seeded"}
 
 

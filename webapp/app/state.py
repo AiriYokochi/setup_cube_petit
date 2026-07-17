@@ -28,6 +28,9 @@ DEFAULT_STATE: dict[str, Any] = {
     "inputs": {},
     # per-step run status: pending | running | done | failed | skipped
     "steps": {},
+    # ros_setup precheck resolution: None (default $HOME/ros) | "separate"
+    # (use $HOME/cube_petit_ros2_ws instead, see engine.resolved_ros_ws()).
+    "ros_ws": None,
 }
 
 

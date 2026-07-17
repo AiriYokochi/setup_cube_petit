@@ -215,11 +215,14 @@ function renderPrecheck(stepId, precheck, container) {
           method: "POST",
           body: { choice: choice.id },
         });
-        if (res.status === "cleaning") {
-          // Attach before the DOM gets rebuilt by loadState(); the "end"
-          // handler inside attachStream() refreshes state once cleanup is done.
+        if (res.run_key) {
+          // "clean" (cleanup run) and "build_only" (runs the step itself)
+          // both stream a real command's log. Attach before the DOM gets
+          // rebuilt by loadState(); the "end" handler inside attachStream()
+          // refreshes state once the run is done.
           attachStream(res.run_key, stepId, { reloadOnEnd: true });
         } else {
+          // "separate_ws": nothing to run, just re-render with the choice saved.
           await loadState();
         }
       } catch (err) {

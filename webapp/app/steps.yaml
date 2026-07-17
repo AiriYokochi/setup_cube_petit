@@ -78,13 +78,17 @@ steps:
     requires_reboot: true
     precheck:
       message_ja: |
-        以前の作業の跡が見つかりました。このまま実行すると、既存フォルダがあるために
-        途中で失敗します。どちらかを選んでください。
+        ~/ros に以前の作業の跡(既存のROSワークスペースや、cube_petit_ros のソース一式など)
+        が見つかりました。状況に応じて、下から選んでください。
       paths:
         - path: "ros/src/cube_petit_ros"
           label_ja: "ROSワークスペース内 cube_petit_ros"
         - path: "work/ripvcs"
           label_ja: "ripvcs (ビルド支援ツール)"
+      # skip / clean are always offered when the precheck fires. build_only /
+      # separate_ws are added dynamically by engine.precheck_status() only
+      # when they actually apply (source cloned but not built / ~/ros exists)
+      # -- see engine.py for that logic.
       choices:
         - id: skip
           label_ja: "このステップをスキップする(すでに導入済みとして次へ進む)"

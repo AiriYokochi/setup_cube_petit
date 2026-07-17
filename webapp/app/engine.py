@@ -125,6 +125,7 @@ async def start_command(
     *,
     cwd: Optional[Path] = None,
     stdin_text: Optional[str] = None,
+    extra_env: Optional[dict] = None,
 ) -> StepRun:
     if is_running(step_id):
         raise RuntimeError(f"step {step_id} is already running")
@@ -134,6 +135,10 @@ async def start_command(
 
     log_path = state_mod.log_path_for(step_id)
     log_path.write_text("", encoding="utf-8")  # fresh log for this run
+
+    env = _child_env()
+    if extra_env:
+        env.update(extra_env)
 
     # stdin is a PIPE when we have scripted answers, DEVNULL otherwise: never
     # let a child inherit the server's terminal, where an unexpected prompt
@@ -146,7 +151,7 @@ async def start_command(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
         cwd=str(cwd) if cwd else None,
-        env=_child_env(),
+        env=env,
     )
     run.proc = proc
 
@@ -183,9 +188,10 @@ echo "Prereq check complete."
     return _cmd_or_mock(real_cmd, "prereq check (Ubuntu version / network / disk space)", 1)
 
 
-def _build_script_cmd(script_name: str) -> str:
-    real_cmd = f"bash {shlex.quote(str(script_path(script_name)))}"
-    return _cmd_or_mock(real_cmd, f"bash {script_name}", 3)
+def _build_script_cmd(script_name: str, *, args: str = "") -> str:
+    suffix = f" {args}" if args else ""
+    real_cmd = f"bash {shlex.quote(str(script_path(script_name)))}{suffix}"
+    return _cmd_or_mock(real_cmd, f"bash {script_name}{suffix}", 3)
 
 
 def _mock_check_cmd() -> str:
@@ -254,14 +260,63 @@ def _build_toggle_cmd(
     return real_cmd, stdin_text
 
 
-async def run_step(step_def: dict, inputs: dict) -> StepRun:
+def _precheck_base() -> Path:
+    return MOCK_HOME if MOCK else Path.home()
+
+
+def _ros_setup_ws_dir() -> Path:
+    """The *default* ros_setup workspace ($HOME/ros, or the mock sandbox
+    equivalent) -- used for precheck detection, before any "separate
+    workspace" choice has been resolved. Not to be confused with
+    resolved_ros_ws(), which is what actually gets passed to setup_ros.bash
+    as CUBE_PETIT_ROS_WS once a choice has been made."""
+    return _precheck_base() / "ros"
+
+
+def resolved_ros_ws(state: dict) -> Path:
+    """The workspace setup_ros.bash will actually build into, given the
+    precheck resolution (if any) saved in state["ros_ws"]."""
+    if state.get("ros_ws") == "separate":
+        return _precheck_base() / "cube_petit_ros2_ws"
+    return _ros_setup_ws_dir()
+
+
+def ros_ws_env(state: dict) -> dict:
+    """Env override for the ros_setup step's child process: only set
+    CUBE_PETIT_ROS_WS when the user picked the "separate workspace" precheck
+    choice -- setup_ros.bash's own default ($HOME/ros) is otherwise correct
+    and there is no need to override it."""
+    if state.get("ros_ws") == "separate":
+        return {"CUBE_PETIT_ROS_WS": str(resolved_ros_ws(state))}
+    return {}
+
+
+def _extra_env_for(step_id: str, state: dict, inputs: dict) -> dict:
+    """Per-step environment overrides for the child process, layered on top
+    of _child_env(). Centralizes cases where a step needs values that live
+    elsewhere in state rather than the server's own environment."""
+    if step_id == "ros_setup":
+        return ros_ws_env(state)
+    return {}
+
+
+def _ros_ws_built(ws_dir: Path) -> bool:
+    install_dir = ws_dir / "install"
+    if not install_dir.is_dir():
+        return False
+    return any(p.name.startswith("cube_petit_") for p in install_dir.iterdir())
+
+
+async def run_step(step_def: dict, inputs: dict, state: dict) -> StepRun:
     step_id = step_def["id"]
     step_type = step_def["type"]
+    extra_env = _extra_env_for(step_id, state, inputs)
 
     if step_type == "prereq_check":
         return await start_command(step_id, _build_prereq_cmd(), cwd=REPO_ROOT)
     if step_type in ("script", "script_with_precheck"):
-        return await start_command(step_id, _build_script_cmd(step_def["script"]), cwd=REPO_ROOT)
+        cmd = _build_script_cmd(step_def["script"])
+        return await start_command(step_id, cmd, cwd=REPO_ROOT, extra_env=extra_env)
     if step_type == "toggle_script":
         cmd, stdin_text = _build_toggle_cmd(step_def["script"], step_def["inputs"], inputs)
         return await start_command(step_id, cmd, cwd=REPO_ROOT, stdin_text=stdin_text)
@@ -270,23 +325,66 @@ async def run_step(step_def: dict, inputs: dict) -> StepRun:
     raise ValueError(f"step type {step_type!r} is not directly runnable via run_step()")
 
 
-def _precheck_base() -> Path:
-    return MOCK_HOME if MOCK else Path.home()
+async def run_build_only(step_def: dict, state: dict) -> StepRun:
+    """Resolve the ros_setup precheck's "source is there, just rebuild"
+    choice: run setup_ros.bash --build-only directly as the step's own run,
+    so a successful build marks the ros_setup step itself done (unlike the
+    'clean' choice below, which is just cleanup and leaves the step pending
+    for a normal run afterwards)."""
+    step_id = step_def["id"]
+    extra_env = _extra_env_for(step_id, state, {})
+    cmd = _build_script_cmd(step_def["script"], args="--build-only")
+    return await start_command(step_id, cmd, cwd=REPO_ROOT, extra_env=extra_env)
 
 
-def precheck_status(step_def: dict) -> dict:
-    """Report which of the step's 'existing work' paths are present."""
+def precheck_status(step_def: dict, state: dict) -> dict:
+    """Report which of the step's 'existing work' paths are present, plus
+    which resolution choices apply given the current filesystem state.
+
+    skip / clean are always offered (from steps.yaml) once anything is
+    detected. build_only / separate_ws are computed dynamically here:
+      - separate_ws: offered whenever $HOME/ros exists at all (regardless of
+        whether cube_petit_ros was ever cloned into it) -- picking it routes
+        the whole install into a fresh, isolated workspace instead.
+      - build_only: offered when cube_petit_ros source is cloned but has not
+        been built yet (no install/cube_petit_* directories).
+    """
     precheck = step_def.get("precheck")
     if not precheck:
         return {"needed": False}
 
+    # Once "separate workspace" has been resolved, the whole point was to
+    # route around whatever is under $HOME/ros -- nothing left to ask about.
+    if state.get("ros_ws") == "separate":
+        return {"needed": False, "existing": [], "message_ja": "", "choices": []}
+
     base = _precheck_base()
     existing = [p for p in precheck["paths"] if (base / p["path"]).exists()]
+
+    ros_dir = _ros_setup_ws_dir()
+    ros_dir_exists = ros_dir.exists()
+    cube_petit_ros_cloned = (ros_dir / "src" / "cube_petit_ros").exists()
+    build_only_available = cube_petit_ros_cloned and not _ros_ws_built(ros_dir)
+
+    needed = bool(existing) or ros_dir_exists
+
+    dynamic_choices = []
+    if build_only_available:
+        dynamic_choices.append({
+            "id": "build_only",
+            "label_ja": "ソース一式はあるので、ビルドだけやり直す",
+        })
+    if ros_dir_exists:
+        dynamic_choices.append({
+            "id": "separate_ws",
+            "label_ja": "既存の ~/ros はそのまま残し、別ワークスペース cube_petit_ros2_ws を新しく作って導入する",
+        })
+
     return {
-        "needed": bool(existing),
+        "needed": needed,
         "existing": existing,
         "message_ja": precheck.get("message_ja", ""),
-        "choices": precheck.get("choices", []),
+        "choices": dynamic_choices + precheck.get("choices", []),
     }
 
 
@@ -407,6 +505,16 @@ async def bluetooth_connect(mac: str) -> dict:
 
 
 # --- mock-only helpers used by the debug API to exercise the precheck branch ---
+#
+# Three fixture shapes, matching the three ros_setup precheck scenarios:
+#   seed          -- cube_petit_ros cloned but not built, + ripvcs present.
+#                    ros_dir_exists is also true (it's under $HOME/ros), so
+#                    this exercises skip/clean/build_only/separate_ws all at
+#                    once.
+#   seed_bare_ros -- just an empty $HOME/ros with nothing of ours in it.
+#                    Only separate_ws (+ skip/clean) applies.
+#   seed_built    -- like seed, but with a fake install/ directory, so
+#                    build_only must NOT be offered (already built).
 
 def mock_seed_existing(step_def: dict) -> None:
     if not MOCK:
@@ -418,13 +526,30 @@ def mock_seed_existing(step_def: dict) -> None:
         (MOCK_HOME / p["path"]).mkdir(parents=True, exist_ok=True)
 
 
+def mock_seed_bare_ros() -> None:
+    if not MOCK:
+        raise RuntimeError("mock_seed_bare_ros is only available in --mock mode")
+    (MOCK_HOME / "ros").mkdir(parents=True, exist_ok=True)
+
+
+def mock_seed_built(step_def: dict) -> None:
+    if not MOCK:
+        raise RuntimeError("mock_seed_built is only available in --mock mode")
+    mock_seed_existing(step_def)
+    (MOCK_HOME / "ros" / "install" / "cube_petit_bringup").mkdir(parents=True, exist_ok=True)
+
+
 def mock_clear_existing(step_def: dict) -> None:
     if not MOCK:
         raise RuntimeError("mock_clear_existing is only available in --mock mode")
     import shutil
 
     precheck = step_def.get("precheck")
-    if not precheck:
-        return
-    for p in precheck["paths"]:
-        shutil.rmtree(MOCK_HOME / p["path"], ignore_errors=True)
+    if precheck:
+        for p in precheck["paths"]:
+            shutil.rmtree(MOCK_HOME / p["path"], ignore_errors=True)
+    # Also remove the bare/built fixtures above, and any cube_petit_ros2_ws
+    # from a previous "separate workspace" run, for a full reset between
+    # manual test scenarios.
+    shutil.rmtree(MOCK_HOME / "ros", ignore_errors=True)
+    shutil.rmtree(MOCK_HOME / "cube_petit_ros2_ws", ignore_errors=True)
