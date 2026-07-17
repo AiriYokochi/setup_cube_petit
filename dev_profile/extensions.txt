@@ -1,4 +1,4 @@
-# VS Code extensions for the sbgisen-ROS2 profile (one marketplace ID per line).
+# VS Code extensions for the cube-petit-ROS2 profile (one marketplace ID per line).
 # Lines starting with # are ignored by setup_dev_profile.bash.
 charliermarsh.ruff
 cheshirekow.cmake-format

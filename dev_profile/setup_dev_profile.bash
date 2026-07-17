@@ -1,5 +1,5 @@
 #!/bin/bash
-# Set up the "sbgisen-ROS2" VS Code profile on this machine:
+# Set up the "cube-petit-ROS2" VS Code profile on this machine:
 #   - clone sbgisen/.github (shared lint/format config referenced by the
 #     profile: pyproject.toml for isort/yapf/ruff, ros2/.cmake-format, ...)
 #   - install the extensions listed in extensions.txt into the profile
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROFILE_NAME="sbgisen-ROS2"
+PROFILE_NAME="cube-petit-ROS2"
 GITHUB_DIR="$HOME/work/.github"
 CODE_USER_DIR="$HOME/.config/Code/User"
 
