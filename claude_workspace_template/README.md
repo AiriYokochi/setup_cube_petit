@@ -37,6 +37,8 @@ git push -u origin main
 - `CLAUDE.md` — このワークスペースの運用ルール(Claudeが毎回読む)
 - `.claude/skills/` — Claudeに教えた定型ワークフロー(Issue作成・PR作成・計画と委譲)。
   中身はテンプレートなので、自分のリポジトリ・チームに合わせて書き換えて使う
+- `docs/dev_guide/` — 開発の基本ルール集(開発の流れ・ブランチ運用・PRの出し方・
+  アップデート・fork運用・個体固有情報の扱い)。入口は `docs/dev_guide/INDEX.md`
 - `docs/worklog/` — 日次作業ログ置き場
 - `plans/` — 計画書置き場
 - `memory/` — Claudeの長期記憶の実体(CLAUDE.mdの手順でsymlink接続)
