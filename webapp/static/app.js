@@ -437,6 +437,28 @@ function codeRow(container, labelText, command) {
   container.appendChild(row);
 }
 
+function renderConnectResult(container, r) {
+  container.innerHTML = "";
+  const box = document.createElement("div");
+  box.className = "connect-status " + (r.ok ? "ok" : "fail");
+  box.textContent = r.ok
+    ? "接続してpushしました 🎉 GitHub側にワークスペースが入っています。"
+    : "接続できませんでした。" + (r.hint ? " " + r.hint : "");
+  container.appendChild(box);
+  if (r.output) {
+    const details = document.createElement("details");
+    if (!r.ok) details.open = true;
+    const summary = document.createElement("summary");
+    summary.textContent = "実行内容の詳細";
+    details.appendChild(summary);
+    const pre = document.createElement("div");
+    pre.className = "log-output";
+    pre.textContent = r.output;
+    details.appendChild(pre);
+    container.appendChild(details);
+  }
+}
+
 async function renderClaudeSupportPanel(id, step, el) {
   let res;
   try {
@@ -473,17 +495,29 @@ async function renderClaudeSupportPanel(id, step, el) {
   if (b1) sec1.appendChild(b1);
   box.appendChild(sec1);
 
-  // 2. register the public key
+  // 2. register the public key (masked on screen; copy fetches the full key)
   const sec2 = guideSection(2, "この公開鍵をGitHubに登録");
-  if (res.pubkey) {
+  if (res.pubkey_masked) {
     const row = document.createElement("div");
     row.className = "code-row";
     const code = document.createElement("code");
     code.className = "code-box pubkey";
-    code.textContent = res.pubkey;
+    code.textContent = res.pubkey_masked;
     row.appendChild(code);
-    row.appendChild(copyButton(res.pubkey));
+    const keyBtn = mkButton("primary copy-btn", "コピー", async () => {
+      try {
+        const r = await api(`/api/steps/${id}/pubkey`);
+        await copyText(r.pubkey, keyBtn);
+      } catch (err) {
+        alert("公開鍵を取得できませんでした: " + err.message);
+      }
+    });
+    row.appendChild(keyBtn);
     sec2.appendChild(row);
+    const note = document.createElement("p");
+    note.className = "help";
+    note.textContent = "画面では一部を伏せています。「コピー」を押すと全文がクリップボードに入ります。";
+    sec2.appendChild(note);
   } else {
     const p = document.createElement("p");
     p.className = "help";
@@ -494,10 +528,57 @@ async function renderClaudeSupportPanel(id, step, el) {
   if (b2) sec2.appendChild(b2);
   box.appendChild(sec2);
 
-  // 3. terminal commands, each with its own copy button
-  const sec3 = guideSection(3, "ターミナルで順番に実行");
-  (res.commands || []).forEach((c) => codeRow(sec3, c.label_ja, c.command));
+  // 3. connect the workspace to the repository (one button; manual fallback)
+  const sec3 = guideSection(3, "ワークスペースをGitHubにつなぐ");
+  const connectHelp = document.createElement("p");
+  connectHelp.className = "help";
+  connectHelp.textContent = "作ったリポジトリのURLを入れて「接続して送信」を押すと、接続と最初のpushまで自動で行います。";
+  sec3.appendChild(connectHelp);
+
+  const connectRow = document.createElement("div");
+  connectRow.className = "code-row";
+  const urlInput = document.createElement("input");
+  urlInput.type = "text";
+  urlInput.className = "repo-input";
+  urlInput.placeholder = `git@github.com:あなたのアカウント/${res.repo_suggestion}.git`;
+  connectRow.appendChild(urlInput);
+  const connectStatus = document.createElement("div");
+  const connectBtn = mkButton("primary", "接続して送信", async () => {
+    connectBtn.disabled = true;
+    connectBtn.textContent = "接続中...";
+    connectStatus.innerHTML = "";
+    try {
+      const r = await api(`/api/steps/${id}/connect_repo`, {
+        method: "POST",
+        body: { repo_url: urlInput.value },
+      });
+      renderConnectResult(connectStatus, r);
+    } catch (err) {
+      renderConnectResult(connectStatus, { ok: false, output: "", hint: err.message });
+    } finally {
+      connectBtn.disabled = false;
+      connectBtn.textContent = "接続して送信";
+    }
+  });
+  connectRow.appendChild(connectBtn);
+  sec3.appendChild(connectRow);
+  sec3.appendChild(connectStatus);
+
+  const manual = document.createElement("details");
+  manual.className = "manual-fallback";
+  const manualSummary = document.createElement("summary");
+  manualSummary.textContent = "手動でやる場合(ターミナルでコピー&ペースト)";
+  manual.appendChild(manualSummary);
+  (res.connect_commands || []).forEach((c) => codeRow(manual, c.label_ja, c.command));
+  sec3.appendChild(manual);
   box.appendChild(sec3);
+
+  // 4. first login (interactive, so it stays a copy-paste command)
+  const sec4 = guideSection(4, "Claude Codeを起動して初回ログイン");
+  if (res.login_command) {
+    codeRow(sec4, res.login_command.label_ja, res.login_command.command);
+  }
+  box.appendChild(sec4);
 
   const actions = document.createElement("div");
   actions.className = "actions";

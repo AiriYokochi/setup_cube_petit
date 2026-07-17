@@ -239,6 +239,92 @@ def _build_claude_support_cmd(script_name: str, extra_env: dict) -> str:
     )
 
 
+async def connect_repo(ws_dir: str, repo_url: str) -> dict:
+    """Wire the claude_support workspace to the owner's GitHub repository:
+    remote add/set-url + (first-commit if needed) + push -u. Returns
+    {ok, output}; URL validation happens in the API layer. In mock mode
+    nothing real runs."""
+    if MOCK:
+        return {
+            "ok": True,
+            "output": (
+                f"[mock] would run in {ws_dir}:\n"
+                f"[mock]   git remote add origin {repo_url}\n"
+                "[mock]   git add -A && git commit -m 'initial workspace'\n"
+                "[mock]   git push -u origin main\n"
+                "[mock] push succeeded."
+            ),
+        }
+
+    env = _child_env()
+    # First contact with github.com would otherwise block on the interactive
+    # host key prompt (stdin is /dev/null here, so it would just fail).
+    env["GIT_SSH_COMMAND"] = "ssh -o StrictHostKeyChecking=accept-new"
+
+    outputs: list[str] = []
+
+    async def run(*args: str) -> int:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            cwd=ws_dir,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            env=env,
+        )
+        try:
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=90)
+        except asyncio.TimeoutError:
+            proc.kill()
+            outputs.append(f"$ {' '.join(args)}\n(timed out)")
+            return 124
+        text = out.decode(errors="replace").strip()
+        outputs.append(f"$ {' '.join(args)}" + (f"\n{text}" if text else ""))
+        return proc.returncode or 0
+
+    def fail() -> dict:
+        return {"ok": False, "output": "\n".join(outputs)}
+
+    # remote add, or update it when re-running with a corrected URL
+    if await run("git", "remote", "get-url", "origin") == 0:
+        if await run("git", "remote", "set-url", "origin", repo_url) != 0:
+            return fail()
+    else:
+        outputs.pop()  # drop the expected get-url failure from the report
+        if await run("git", "remote", "add", "origin", repo_url) != 0:
+            return fail()
+
+    # The workspace is git-init'ed but has no commit yet on the first run;
+    # commit with a fallback identity so a fresh machine (no git config)
+    # still works.
+    if await run("git", "rev-parse", "--verify", "HEAD") != 0:
+        outputs.pop()  # expected on first run, not an error worth showing
+        if await run("git", "add", "-A") != 0:
+            return fail()
+        if await run(
+            "git",
+            "-c", "user.name=Cube Petit Setup",
+            "-c", "user.email=cube-petit-setup@localhost",
+            "commit", "-m", "initial workspace",
+        ) != 0:
+            return fail()
+
+    branch_proc = await asyncio.create_subprocess_exec(
+        "git", "rev-parse", "--abbrev-ref", "HEAD",
+        cwd=ws_dir,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+        env=env,
+    )
+    out, _ = await branch_proc.communicate()
+    branch = out.decode(errors="replace").strip() or "main"
+
+    if await run("git", "push", "-u", "origin", branch) != 0:
+        return fail()
+    return {"ok": True, "output": "\n".join(outputs)}
+
+
 def _mock_check_cmd() -> str:
     """A fake udev_check.sh-like log: same "[OK]"/"[NG]" line shape as the
     real script (see shell_scripts/udev_check.sh), colored the same way,
