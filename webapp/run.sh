@@ -36,6 +36,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Long steps (apt upgrade, colcon build) can outlast the default 5-minute
+# screen blank, which looks like a freeze to a non-engineer. Disable idle
+# blanking up front; setup_pc.bash makes the same setting permanent anyway.
+if command -v gsettings >/dev/null 2>&1; then
+  gsettings set org.gnome.desktop.session idle-delay 0 2>/dev/null || true
+fi
+
 if [ "$MOCK" -eq 1 ]; then
   echo "[run.sh] --mock mode: no real setup commands will run, sudo is not needed."
   export CUBE_PETIT_SETUP_MOCK=1

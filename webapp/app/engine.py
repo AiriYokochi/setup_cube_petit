@@ -103,6 +103,21 @@ async def _pump_output(run: StepRun, step_id: str) -> None:
         run.broadcast(f"__END__{code}")
 
 
+def _child_env() -> dict:
+    """Environment for setup scripts: the server runs inside webapp/.venv,
+    but the scripts must NOT — colcon/CMake would pick up the venv python,
+    which lacks catkin_pkg etc., and the workspace build fails. Strip the
+    venv activation before spawning children."""
+    env = os.environ.copy()
+    venv = env.pop("VIRTUAL_ENV", None)
+    if venv:
+        env["PATH"] = os.pathsep.join(
+            p for p in env.get("PATH", "").split(os.pathsep)
+            if p and not p.startswith(venv)
+        )
+    return env
+
+
 async def start_command(
     step_id: str,
     cmd: str,
@@ -130,6 +145,7 @@ async def start_command(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
         cwd=str(cwd) if cwd else None,
+        env=_child_env(),
     )
     run.proc = proc
 

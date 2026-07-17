@@ -87,40 +87,24 @@ body {
   transition: left 0.6s ease;
   pointer-events: none;
 }
-.progress-petit svg { display: block; }
-
-/* idle: slow blink so the petit always looks alive */
-.petit-eye {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: petit-blink 4.5s infinite;
+.petit-img {
+  display: block;
+  image-rendering: pixelated;
+  transform-origin: 50% 90%;
+  /* idle: slow breathing so the petit always looks alive */
+  animation: petit-breathe 2.6s ease-in-out infinite;
 }
-@keyframes petit-blink {
-  0%, 92%, 100% { transform: scaleY(1); }
-  95% { transform: scaleY(0.1); }
+@keyframes petit-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1.03, 0.97); }
 }
-
-/* running: wheels spin, body bobs */
-.petit-wheel {
-  transform-box: fill-box;
-  transform-origin: center;
+/* running: bounce along with a little rocking */
+.progress-wrap.running .petit-img {
+  animation: petit-run 0.4s ease-in-out infinite;
 }
-.progress-wrap.running .petit-wheel {
-  animation: petit-wheel-spin 0.45s linear infinite;
-}
-@keyframes petit-wheel-spin {
-  to { transform: rotate(360deg); }
-}
-.petit-body {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-.progress-wrap.running .petit-body {
-  animation: petit-bob 0.35s ease-in-out infinite alternate;
-}
-@keyframes petit-bob {
-  from { transform: translateY(0); }
-  to { transform: translateY(-1.6px); }
+@keyframes petit-run {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-3px) rotate(3deg); }
 }
 
 .progress-text {
