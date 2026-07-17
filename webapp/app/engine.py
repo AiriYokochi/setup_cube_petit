@@ -209,6 +209,36 @@ def _build_env_setup_cmd(script_name: str, extra_env: dict) -> str:
     return _mock_command(f"{script_name} (env: {shown})", 2)
 
 
+def _build_claude_support_cmd(script_name: str, extra_env: dict) -> str:
+    """Like _build_env_setup_cmd, but the mock variant also produces the side
+    effects the post-run guide panel needs (claude_support.json + a fake
+    public key file under MOCK_HOME), so the panel can be exercised end to
+    end in --mock without reading the real ~/.ssh."""
+    if not MOCK:
+        return _build_env_setup_cmd(script_name, extra_env)
+    # robot_namespace is validated as ^cube_petit_[a-z0-9_]+$ upstream, so it
+    # is safe to embed in the generated snippet.
+    ns = extra_env.get("ROBOT_NAMESPACE") or "cube_petit"
+    seed = (
+        "import json, pathlib\n"
+        f"home = pathlib.Path({str(MOCK_HOME)!r})\n"
+        "ssh = home / '.ssh'\n"
+        "ssh.mkdir(parents=True, exist_ok=True)\n"
+        "pub = ssh / 'id_ed25519.pub'\n"
+        f"pub.write_text('ssh-ed25519 AAAAC3mockmockmockmockmock {ns}\\n')\n"
+        f"ws = home / 'work' / '{ns}_claude'\n"
+        "info = {'workspace_dir': str(ws), 'pubkey_path': str(pub),\n"
+        f"        'repo_suggestion': '{ns}_claude', 'robot_name': '{ns}'}}\n"
+        f"path = pathlib.Path({str(state_mod.STATE_DIR)!r}) / 'claude_support.json'\n"
+        "path.write_text(json.dumps(info, ensure_ascii=False, indent=2))\n"
+    )
+    return (
+        _build_env_setup_cmd(script_name, extra_env)
+        + f"\npython3 -c {shlex.quote(seed)}"
+        + "\necho '[mock] wrote claude_support.json'"
+    )
+
+
 def _mock_check_cmd() -> str:
     """A fake udev_check.sh-like log: same "[OK]"/"[NG]" line shape as the
     real script (see shell_scripts/udev_check.sh), colored the same way,
@@ -342,9 +372,13 @@ async def run_step(step_def: dict, inputs: dict, state: dict) -> StepRun:
     if step_type == "prereq_check":
         return await start_command(step_id, _build_prereq_cmd(), cwd=REPO_ROOT)
     if step_type in ("script", "script_with_precheck"):
-        if step_id in ("env_setup", "claude_support"):
-            # Both steps exist to thread state into the child's env; show it
-            # in the mock description (see _build_env_setup_cmd).
+        if step_id == "claude_support":
+            # Threads state into the child's env AND (in mock) seeds the
+            # artifacts the post-run guide panel reads.
+            cmd = _build_claude_support_cmd(step_def["script"], extra_env)
+        elif step_id == "env_setup":
+            # Exists to thread state into the child's env; show it in the
+            # mock description (see _build_env_setup_cmd).
             cmd = _build_env_setup_cmd(step_def["script"], extra_env)
         else:
             cmd = _build_script_cmd(step_def["script"])

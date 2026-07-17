@@ -179,7 +179,12 @@ function attachStream(runKey, stepId, opts = {}) {
   };
 }
 
+// Steps that show their own post-run guide panel instead of jumping ahead;
+// the user leaves them via that panel's explicit "next" button.
+const NO_AUTO_ADVANCE = new Set(["claude_support"]);
+
 function advanceIfDone(stepId) {
+  if (NO_AUTO_ADVANCE.has(stepId)) return;
   // After a run finishes successfully, move the user to the next step.
   const idx = state.data.steps.findIndex((s) => s.id === stepId);
   if (idx === -1) return;
@@ -353,6 +358,153 @@ function renderBluetoothStep(id, step, el, actions) {
   api("/api/bluetooth/devices")
     .then((res) => renderBtDeviceList(deviceBox, res.devices, id))
     .catch(() => {});
+}
+
+// --- claude code support (step 9) post-run guide panel ----------------------
+
+async function copyText(text, btn) {
+  let ok = false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    }
+  } catch (e) {
+    // fall through to the legacy path
+  }
+  if (!ok) {
+    // Fallback for non-secure contexts (e.g. http://<LAN IP>:8760 from a
+    // tablet), where navigator.clipboard is unavailable.
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      ok = document.execCommand("copy");
+    } catch (e) {
+      ok = false;
+    }
+    ta.remove();
+  }
+  const orig = btn.textContent;
+  btn.textContent = ok ? "コピーしました" : "コピーできませんでした";
+  btn.disabled = true;
+  setTimeout(() => {
+    btn.textContent = orig;
+    btn.disabled = false;
+  }, 1500);
+}
+
+function copyButton(text) {
+  const btn = mkButton("primary copy-btn", "コピー", () => copyText(text, btn));
+  return btn;
+}
+
+function linkButton(link) {
+  if (!link || !link.url) return null;
+  const btn = mkButton("secondary link-btn", `${link.label_ja} ↗`, () => {
+    window.open(link.url, "_blank", "noopener");
+  });
+  return btn;
+}
+
+function guideSection(no, titleText) {
+  const sec = document.createElement("div");
+  sec.className = "guide-section";
+  const title = document.createElement("p");
+  title.className = "guide-section-title";
+  title.textContent = `${no}. ${titleText}`;
+  sec.appendChild(title);
+  return sec;
+}
+
+function codeRow(container, labelText, command) {
+  if (labelText) {
+    const label = document.createElement("div");
+    label.className = "help";
+    label.textContent = labelText;
+    container.appendChild(label);
+  }
+  const row = document.createElement("div");
+  row.className = "code-row";
+  const code = document.createElement("code");
+  code.className = "code-box";
+  code.textContent = command;
+  row.appendChild(code);
+  row.appendChild(copyButton(command));
+  container.appendChild(row);
+}
+
+async function renderClaudeSupportPanel(id, step, el) {
+  let res;
+  try {
+    res = await api(`/api/steps/${id}/result`);
+  } catch (err) {
+    return;
+  }
+  if (!res.available) return;
+
+  const links = step.guide_links || {};
+  const box = document.createElement("div");
+  box.className = "claude-guide-box";
+
+  const head = document.createElement("p");
+  head.className = "guide-head";
+  head.textContent = "導入できました!あと少し、下の手順で仕上げてください。";
+  box.appendChild(head);
+
+  const introLinks = document.createElement("div");
+  introLinks.className = "guide-links";
+  [linkButton(links.about_claude), linkButton(links.github_signup)].forEach((b) => {
+    if (b) introLinks.appendChild(b);
+  });
+  box.appendChild(introLinks);
+
+  // 1. create the private repository
+  const sec1 = guideSection(1, "GitHubで個人の「privateリポジトリ」を作成");
+  const repoNote = document.createElement("p");
+  repoNote.className = "help";
+  repoNote.textContent =
+    `リポジトリ名の例: ${res.repo_suggestion}(作業ログや記憶に内部情報が入るので、必ず private にしてください)`;
+  sec1.appendChild(repoNote);
+  const b1 = linkButton(links.new_repo);
+  if (b1) sec1.appendChild(b1);
+  box.appendChild(sec1);
+
+  // 2. register the public key
+  const sec2 = guideSection(2, "この公開鍵をGitHubに登録");
+  if (res.pubkey) {
+    const row = document.createElement("div");
+    row.className = "code-row";
+    const code = document.createElement("code");
+    code.className = "code-box pubkey";
+    code.textContent = res.pubkey;
+    row.appendChild(code);
+    row.appendChild(copyButton(res.pubkey));
+    sec2.appendChild(row);
+  } else {
+    const p = document.createElement("p");
+    p.className = "help";
+    p.textContent = `公開鍵を読み取れませんでした。ターミナルで cat ${res.pubkey_path || "~/.ssh/id_ed25519.pub"} を実行して内容を登録してください。`;
+    sec2.appendChild(p);
+  }
+  const b2 = linkButton(links.ssh_keys);
+  if (b2) sec2.appendChild(b2);
+  box.appendChild(sec2);
+
+  // 3. terminal commands, each with its own copy button
+  const sec3 = guideSection(3, "ターミナルで順番に実行");
+  (res.commands || []).forEach((c) => codeRow(sec3, c.label_ja, c.command));
+  box.appendChild(sec3);
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  actions.appendChild(mkButton("primary", "次へ", () => goToNextStep(id)));
+  box.appendChild(actions);
+
+  el.appendChild(box);
 }
 
 // --- sensor connection check (step 8) ---------------------------------------
@@ -591,6 +743,13 @@ function renderDetail(id) {
     // would loop (see attachStream).
     attachStream(id, id, { reloadOnEnd: running });
     logPanel.open = running || step.status === "failed";
+  }
+
+  // The claude_support step renders a post-run guide panel (repo / key /
+  // commands, each with copy buttons) instead of auto-advancing; the user
+  // moves on via the panel's explicit "next" button.
+  if (id === "claude_support" && step.status === "done") {
+    renderClaudeSupportPanel(id, step, el);
   }
 
   // Celebrate once every step is done/skipped, shown below the last step's

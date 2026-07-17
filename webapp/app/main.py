@@ -7,6 +7,7 @@ reboot gate). See webapp/README.md for how to run it.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from pathlib import Path
 from typing import Optional
@@ -312,13 +313,59 @@ async def bluetooth_connect(body: BluetoothConnectBody):
     return await engine.bluetooth_connect(body.mac)
 
 
-# --- sensor connection check (step 8) ---------------------------------------
+# --- per-step results (sensor check list / claude_support guide) ------------
+
+def _claude_support_result() -> dict:
+    """Post-run guide data for the claude_support step: the JSON summary
+    written by setup_claude_workspace.bash plus the public key file it
+    points at. The key is served straight to the guide panel and is never
+    written to the streamed/persisted step logs."""
+    info_path = state_mod.STATE_DIR / "claude_support.json"
+    try:
+        info = json.loads(info_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"available": False}
+    pubkey = None
+    if info.get("pubkey_path"):
+        try:
+            pubkey = Path(info["pubkey_path"]).read_text(encoding="utf-8").strip()
+        except OSError:
+            pubkey = None
+    ws = info.get("workspace_dir", "")
+    repo = info.get("repo_suggestion", "cube_petit_claude")
+    return {
+        "available": True,
+        "robot_name": info.get("robot_name"),
+        "workspace_dir": ws,
+        "repo_suggestion": repo,
+        "pubkey": pubkey,
+        "pubkey_path": info.get("pubkey_path"),
+        # Guide link buttons come from steps.yaml (guide_links), which the
+        # frontend already has via /api/state -- not duplicated here.
+        "commands": [
+            {
+                "label_ja": "ワークスペースをリポジトリにつなぐ(<あなたのアカウント> は自分のGitHubアカウント名に置き換えてください)",
+                "command": f"cd {ws} && git remote add origin git@github.com:<あなたのアカウント>/{repo}.git",
+            },
+            {
+                "label_ja": "最初の内容をpushする",
+                "command": f'cd {ws} && git add -A && git commit -m "initial workspace" && git push -u origin main',
+            },
+            {
+                "label_ja": "Claude Codeを起動して初回ログイン(ここでプラン/課金の設定をします)",
+                "command": f"cd {ws} && claude",
+            },
+        ],
+    }
+
 
 @app.get("/api/steps/{step_id}/result")
-async def get_check_result(step_id: str):
+async def get_step_result(step_id: str):
     step_def = _get_step_or_404(step_id)
+    if step_def["id"] == "claude_support":
+        return _claude_support_result()
     if step_def["type"] != "check":
-        raise HTTPException(400, "this step has no check result")
+        raise HTTPException(400, "this step has no result")
     log_path = state_mod.log_path_for(step_id)
     if not log_path.exists():
         return {"items": [], "ok_count": 0, "total": 0}
