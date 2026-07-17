@@ -4,8 +4,7 @@ After=default.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/pactl set-default-sink alsa_output.usb-Creative_Technology_Ltd_Sound_Blaster_Play__3_YDSB1730445003421J-00.analog-stereo
-ExecStart=/usr/bin/pactl set-default-source alsa_input.usb-Creative_Technology_Ltd_Sound_Blaster_Play__3_YDSB1730445003421J-00.analog-stereo
+ExecStart=/usr/local/bin/set_soundblaster.sh
 
 [Install]
 WantedBy=default.target
