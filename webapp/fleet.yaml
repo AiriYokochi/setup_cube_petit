@@ -2,17 +2,24 @@
 # 機体の追加・削除はこのファイルを編集してください(ページは /api/fleet 経由で読みます)。
 # Hosts can be mDNS names (cube-petit-<name>.local) or IP addresses.
 # Robots that are powered off / not on this network simply show a gray dot.
+# color: card accent color for the robot (any CSS color). If omitted, the
+# page falls back to a built-in palette keyed by the robot's name.
 robots:
   - name: orange
     host: cube-petit-orange.local
+    color: "#E8830C"
   - name: yellow
     host: cube-petit-yellow.local
+    color: "#F5C518"
   - name: pink
     host: cube-petit-pink.local
+    color: "#F472B6"
   - name: violet
     host: cube-petit-violet.local
+    color: "#A78BFA"
   - name: clear
     host: cube-petit-clear.local
+    color: "#B7C5CC"
 
 ports:
   setup: 8760      # setup wizard (this web app)
