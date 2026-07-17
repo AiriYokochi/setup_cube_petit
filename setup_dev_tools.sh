@@ -27,6 +27,12 @@ if confirm "Install VS Code (Text Editor)?"; then
   sudo sh -c 'echo "deb [arch=amd64] https://packages.microsoft.com/repos/vscode stable main" > /etc/apt/sources.list.d/vscode.list'
   sudo apt update
   sudo apt install -y code
+  # Also install the shared cube_petit dev profile (extensions + settings +
+  # shared lint config) so the editor is ready to use out of the box.
+  # Non-fatal: if VS Code has not registered the profile yet, the script
+  # explains how to finish it manually. See dev_profile/README.md.
+  bash ~/work/cube_petit_setup/dev_profile/setup_dev_profile.bash \
+    || echo -e "\e[1;31m [WARN] dev profile install incomplete -- open VS Code once, then run dev_profile/setup_dev_profile.bash again \e[m"
 else
   echo "Skip VS Code"
 fi

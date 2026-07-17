@@ -51,6 +51,8 @@ steps:
     description_ja: |
       GitKraken(Git GUIツール)とVS Code(テキストエディタ)を導入するか選べます。
       開発者以外の方は、どちらもOFFのまま「実行」して進んでください。
+      VS Codeを選ぶと、Cube Petit開発用のプロファイル(推奨拡張と設定一式)も
+      あわせて自動で入ります。
     type: toggle_script
     script: setup_dev_tools.sh
     needs_sudo: true
