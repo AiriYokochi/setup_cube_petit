@@ -21,7 +21,7 @@ echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl
 sudo apt update
 sudo apt install -y google-chrome-stable
 # remove keyring for open Chrome
-rm ~/.local/share/keyrings/login.keyring
+rm -f ~/.local/share/keyrings/login.keyring
 
 echo -e '\e[1;31m == Setup Udev rules == \e[m'
 # Udevs
@@ -55,9 +55,11 @@ mkdir -p ~/Pictures/Wallpapers
 cp ~/work/cube_petit_setup/pictures/*.png ~/Pictures/Wallpapers
 gsettings set org.gnome.desktop.background picture-uri "file://$HOME/Pictures/Wallpapers/happy.png"
 
-# Auto login
-sudo sed -i '/^\[daemon\]/a AutomaticLoginEnable=true\nAutomaticLogin='$(whoami) /etc/gdm3/custom.conf
+# Auto login. Applied on the next reboot; do NOT restart gdm here, it kills
+# the running GUI session (terminal, browser, the setup webapp) mid-setup.
+if ! sudo grep -q '^AutomaticLoginEnable=true' /etc/gdm3/custom.conf; then
+  sudo sed -i '/^\[daemon\]/a AutomaticLoginEnable=true\nAutomaticLogin='$(whoami) /etc/gdm3/custom.conf
+fi
 
 echo -e '\e[1;31m == Setup PC Finished == \e[m'
-
-sudo systemctl restart gdm
+echo 'Auto-login and other display settings take effect after the next reboot.'

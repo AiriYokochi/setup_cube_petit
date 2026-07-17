@@ -14,7 +14,7 @@ export LANG=en_US.UTF-8
 
 locale  # verify settings
 sudo apt install -y software-properties-common
-sudo add-apt-repository universe
+sudo add-apt-repository -y universe
 sudo apt update && sudo apt install curl -y
 sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
@@ -23,6 +23,9 @@ sudo apt update && sudo apt install -y ros-dev-tools
 sudo apt update
 sudo apt upgrade -y
 sudo apt install -y ros-jazzy-desktop python3-rosdep
+# witmotion_IMU_ros (pulled in via cube_petit_ros.repos) needs Qt5SerialPort
+# to build, but rosdep cannot resolve it from its package.xml.
+sudo apt install -y libqt5serialport5-dev
 grep -qxF "source /opt/ros/jazzy/setup.bash" ~/.bashrc || echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 grep -qxF "source ~/ros/install/setup.bash" ~/.bashrc || echo "source ~/ros/install/setup.bash" >> ~/.bashrc
 

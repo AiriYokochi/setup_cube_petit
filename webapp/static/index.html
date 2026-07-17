@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cube Petit セットアップ</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Cube Petit セットアップ</h1>
+    <span id="mock-badge" class="mock-badge" hidden>MOCK モード(疑似実行)</span>
+  </header>
+
+  <div class="progress-wrap" id="progress-wrap">
+    <div class="progress-track">
+      <div class="progress-fill" id="progress-fill"></div>
+      <div class="progress-petit" id="progress-petit">
+        <img class="petit-img" src="/static/petit.png" alt="" width="44">
+      </div>
+    </div>
+    <span class="progress-text" id="progress-text"></span>
+  </div>
+
+  <main class="layout">
+    <nav id="step-list" class="step-list" aria-label="セットアップの進み具合"></nav>
+
+    <section id="step-detail" class="step-detail">
+      <p class="placeholder">左のリストからステップを選んでください。</p>
+    </section>
+  </main>
+
+  <template id="tpl-step-list-item">
+    <button type="button" class="step-item">
+      <span class="step-icon"></span>
+      <span class="step-title"></span>
+    </button>
+  </template>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

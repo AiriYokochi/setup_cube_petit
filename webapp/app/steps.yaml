@@ -1,0 +1,103 @@
+# Phase 1 (MVP) step definitions for the cube_petit_setup web app.
+#
+# This file is data, not code: the engine (engine.py) reads it and dispatches
+# on "type". Adding a Phase 2 step (device setup, checks, petit) should only
+# require adding an entry here plus, if it's a genuinely new "type", a small
+# handler in engine.py -- the existing setup_pc.bash / setup_ros.bash /
+# setup_dev_tools.sh scripts are called as-is and are not reimplemented here.
+
+steps:
+  - id: prereq
+    title_ja: "1. 前提確認"
+    description_ja: |
+      この機体のPCがセットアップ可能な状態か確認します。
+      あわせて、この機体の名前(個体名)を入力してください。
+      例: cube_petit_yellow のように、色や識別名を英数字とアンダースコアで入力します。
+    type: prereq_check
+    needs_sudo: false
+    skippable: false
+    requires_reboot: false
+    inputs:
+      - id: robot_namespace
+        label_ja: "個体名 (robot_namespace)"
+        placeholder: "cube_petit_yellow"
+        type: text
+        default: "cube_petit_"
+        required: true
+        pattern: "^cube_petit_[a-z0-9_]+$"
+        help_ja: >-
+          半角小文字・数字とアンダースコア(_)のみ、cube_petit_ で始めてください。
+          ROSの決まりでハイフン(-)は使えません。PCのホスト名(例: cube-petit-yellow)は
+          逆にハイフン区切りなので、綴りが違っていて正常です。
+        error_ja: >-
+          個体名は cube_petit_yellow のように、半角小文字・数字とアンダースコア(_)だけで
+          入力してください(ハイフン - や大文字は使えません)。
+
+  - id: pc_setup
+    title_ja: "2. PC基本設定"
+    description_ja: |
+      日本語入力・Google Chrome・壁紙・電源設定・自動ログインなどをまとめて設定します
+      (setup_pc.bash を実行します)。ネットワーク環境によっては5〜10分程度かかります。
+    warning_ja: |
+      自動ログインや画面まわりの設定は、最後のステップで再起動したときに反映されます。
+    type: script
+    script: setup_pc.bash
+    needs_sudo: true
+    skippable: false
+    requires_reboot: false
+
+  - id: dev_tools
+    title_ja: "3. 開発ツール(任意)"
+    description_ja: |
+      GitKraken(Git GUIツール)とVS Code(テキストエディタ)を導入するか選べます。
+      開発者以外の方は、どちらもOFFのまま「実行」して進んでください。
+    type: toggle_script
+    script: setup_dev_tools.sh
+    needs_sudo: true
+    skippable: true
+    requires_reboot: false
+    inputs:
+      - id: install_gitkraken
+        label_ja: "GitKraken (Git GUIツール) を導入する"
+        type: bool
+        default: false
+      - id: install_vscode
+        label_ja: "VS Code (テキストエディタ) を導入する"
+        type: bool
+        default: false
+
+  - id: ros_setup
+    title_ja: "4. ROS導入"
+    description_ja: |
+      ROS 2 JazzyとCube Petitのソフトウェア一式を導入します(setup_ros.bash を実行します)。
+      ビルドに時間がかかります(目安15〜40分)。この間、画面を閉じずにお待ちください。
+    type: script_with_precheck
+    script: setup_ros.bash
+    needs_sudo: true
+    skippable: false
+    requires_reboot: true
+    precheck:
+      message_ja: |
+        以前の作業の跡が見つかりました。このまま実行すると、既存フォルダがあるために
+        途中で失敗します。どちらかを選んでください。
+      paths:
+        - path: "ros/src/cube_petit_ros"
+          label_ja: "ROSワークスペース内 cube_petit_ros"
+        - path: "work/ripvcs"
+          label_ja: "ripvcs (ビルド支援ツール)"
+      choices:
+        - id: skip
+          label_ja: "このステップをスキップする(すでに導入済みとして次へ進む)"
+        - id: clean
+          label_ja: "既存のフォルダを削除してやり直す"
+
+  - id: reboot
+    title_ja: "5. 再起動"
+    description_ja: |
+      権限設定(dialout / video グループ)を反映するため、再起動が必要です。
+      下のボタンを押したあと、この機体を再起動してください。
+      再起動後、もう一度ターミナルで「./webapp/run.sh」を実行すると、続きから再開します。
+    type: reboot_gate
+    needs_sudo: false
+    skippable: false
+    requires_reboot: true
