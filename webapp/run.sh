@@ -77,5 +77,24 @@ if [ -n "$LAN_IP" ]; then
   echo "[run.sh] from a tablet on the same network: http://${LAN_IP}:${PORT}"
 fi
 
+# Open the wizard in the default browser once the server answers (best
+# effort). Skipped when there is no graphical session (e.g. over SSH) or
+# when disabled with CUBE_PETIT_SETUP_NO_BROWSER=1.
+if [ -z "${CUBE_PETIT_SETUP_NO_BROWSER:-}" ] \
+    && [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] \
+    && command -v xdg-open >/dev/null 2>&1; then
+  (
+    for _ in $(seq 1 30); do
+      # Bash-only TCP probe: no curl dependency on a fresh machine.
+      if (exec 3<>"/dev/tcp/127.0.0.1/${PORT}") 2>/dev/null; then
+        exec 3>&- 3<&- 2>/dev/null || true
+        xdg-open "http://localhost:${PORT}" >/dev/null 2>&1 || true
+        exit 0
+      fi
+      sleep 1
+    done
+  ) &
+fi
+
 cd "$HERE"
 exec uvicorn app.main:app --host "$HOST" --port "$PORT"
