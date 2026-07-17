@@ -786,12 +786,14 @@ function checkItemEl(item) {
   const li = document.createElement("li");
   li.className = "check-item " + (item.ok ? "ok" : "ng");
   const mark = document.createElement("span");
-  mark.className = "check-mark";
-  mark.textContent = item.ok ? "✓" : "✗";
+  mark.className = "check-mark check-badge";
+  mark.textContent = item.ok ? "✓ 成功" : "✗ 失敗";
   li.appendChild(mark);
   const label = document.createElement("span");
   label.className = "check-label";
-  label.textContent = item.label;
+  // Translated form ("IMU(姿勢センサ): データがきています…") when the server
+  // recognized the line; raw English text as a fallback for unknown lines.
+  label.textContent = item.label_ja ? `${item.label_ja}: ${item.message_ja}` : item.label;
   li.appendChild(label);
   if (!item.ok && item.detail) {
     const hint = document.createElement("div");
