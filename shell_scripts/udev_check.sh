@@ -24,6 +24,13 @@ echo "=== /dev device check ==="
 for dev in "${DEVICES[@]}"; do
   if ls /dev | grep -q "^${dev}$"; then
     echo -e "${GREEN}[OK]${NC} /dev/${dev} is found"
+  elif [[ "$dev" == "ttyCANable" ]] && ip link show can0 &>/dev/null; then
+    # On real hardware, once can@ttyCANable (slcand) has claimed the serial
+    # port and brought can0 up, the /dev/ttyCANable symlink normally
+    # disappears -- that's expected slcand behavior, not a failure. Treat
+    # "can0 exists" as proof the CAN adapter is fine even without the
+    # symlink, instead of false-NG'ing a machine that is working correctly.
+    echo -e "${GREEN}[OK]${NC} /dev/${dev} is not found, but can0 is up (slcand is holding the port, so no symlink is expected)"
   else
     echo -e "${RED}[NG]${NC} /dev/${dev} is not found"
   fi
@@ -38,7 +45,7 @@ if ifconfig can0 &>/dev/null; then
   if [[ -n "$RX_PACKETS" && "$RX_PACKETS" -gt 0 ]]; then
     echo -e "${GREEN}[OK]${NC} can0 found, 、RX packets = ${RX_PACKETS}"
   else
-    echo -e "${RED}[NG]${NC} can0 found, but RX packets is 0"
+    echo -e "${RED}[NG]${NC} can0 found, but RX packets is 0 (if the robot body itself is powered off, RX stays 0 even though CAN is wired correctly)"
   fi
 else
   echo -e "${RED}[NG]${NC} No can0"
