@@ -221,8 +221,9 @@ _rerun_memo: dict[tuple, bool] = {}
 
 
 def needs_rerun(step_def: dict, step_state: dict) -> bool:
-    """True when the step ran at an older commit AND its script changed
-    since. Only meaningful for steps that wrap a script file."""
+    """True when the step ran at an older commit AND its script (or any of
+    the step's declared watch_paths, e.g. a template directory the script
+    deploys) changed since. Only meaningful for steps that wrap a script."""
     script = step_def.get("script")
     ran_at = step_state.get("ran_at_commit")
     if not script or not ran_at or step_state.get("status") != "done":
@@ -230,14 +231,15 @@ def needs_rerun(step_def: dict, step_state: dict) -> bool:
     head = repo_head()
     if not head or head == ran_at:
         return False
-    key = (ran_at, head, script)
+    paths = [script] + list(step_def.get("watch_paths") or [])
+    key = (ran_at, head, tuple(paths))
     if key not in _rerun_memo:
         import subprocess
 
         try:
             out = subprocess.run(
                 ["git", "-C", str(engine.REPO_ROOT), "diff", "--name-only",
-                 f"{ran_at}..{head}", "--", script],
+                 f"{ran_at}..{head}", "--", *paths],
                 capture_output=True, text=True, timeout=5,
             )
             _rerun_memo[key] = out.returncode == 0 and bool(out.stdout.strip())
