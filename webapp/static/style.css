@@ -14,6 +14,12 @@
 
 * { box-sizing: border-box; }
 
+/* The [hidden] attribute must always win. Without this, any rule like
+   ".report-overlay { display: flex }" overrides the UA's [hidden] display
+   and a "hidden" fullscreen overlay silently covers the page, eating every
+   click (real incident on yellow: dimmed screen, nothing clickable). */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", system-ui, sans-serif;
