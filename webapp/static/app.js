@@ -118,12 +118,19 @@ function renderStepList() {
 function selectStep(id) {
   state.selectedId = id;
   closeStream();
-  renderStepList();
-  renderDetail(id);
+  // A render failure for one step must never leave the whole sidebar dead:
+  // log it and keep the click handlers alive.
+  try {
+    renderStepList();
+    renderDetail(id);
+  } catch (err) {
+    console.error("render failed for step", id, err);
+  }
 }
 
 function closeStream() {
   if (state.eventSource) {
+    if (state.eventSource._cancelFlush) state.eventSource._cancelFlush();
     state.eventSource.close();
     state.eventSource = null;
   }
@@ -149,10 +156,9 @@ function buildLogPanel() {
   return details;
 }
 
-function appendLog(pre, line) {
-  pre.textContent += line + "\n";
-  pre.scrollTop = pre.scrollHeight;
-}
+// Cap on displayed log lines: a real ros_setup log easily exceeds 10k lines
+// and rendering all of it is pointless -- the tail is what matters.
+const MAX_LOG_LINES = 1500;
 
 function attachStream(runKey, stepId, opts = {}) {
   // reloadOnEnd must be false when replaying the log of an already-finished
@@ -165,9 +171,40 @@ function attachStream(runKey, stepId, opts = {}) {
   pre.textContent = "";
   const es = new EventSource(`/api/runs/${runKey}/stream`);
   state.eventSource = es;
-  es.onmessage = (ev) => appendLog(pre, ev.data);
+
+  // Batch incoming lines into one DOM update per 100ms. The naive
+  // one-update-per-line version (textContent += line; scrollTop = ...)
+  // rebuilt the whole text node AND forced a layout for every single line;
+  // replaying a real 10k-line apt/colcon log froze the page for minutes,
+  // which is what "clicking steps stops working" was (verified with a
+  // 12k-line log: the page wedged until the tab was killed).
+  const lines = [];
+  let truncated = 0;
+  let flushTimer = null;
+  const flush = () => {
+    flushTimer = null;
+    const head = truncated > 0 ? `(先頭 ${truncated} 行は省略)\n` : "";
+    pre.textContent = head + lines.join("\n") + (lines.length ? "\n" : "");
+    pre.scrollTop = pre.scrollHeight;
+  };
+  es._cancelFlush = () => {
+    if (flushTimer !== null) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+  };
+  es.onmessage = (ev) => {
+    lines.push(ev.data);
+    if (lines.length > MAX_LOG_LINES) {
+      truncated += lines.length - MAX_LOG_LINES;
+      lines.splice(0, lines.length - MAX_LOG_LINES);
+    }
+    if (flushTimer === null) flushTimer = setTimeout(flush, 100);
+  };
   es.addEventListener("end", async () => {
     es.close();
+    es._cancelFlush();
+    flush(); // make sure the final tail is on screen
     if (state.eventSource === es) state.eventSource = null;
     if (!reloadOnEnd) return;
     await loadState();
@@ -355,8 +392,12 @@ function renderBluetoothStep(id, step, el, actions) {
   }
 
   // Show already-known devices (no fresh scan) as soon as the step opens.
+  // Guard: by the time this resolves the user may have moved to another
+  // step, in which case deviceBox is detached -- skip quietly.
   api("/api/bluetooth/devices")
-    .then((res) => renderBtDeviceList(deviceBox, res.devices, id))
+    .then((res) => {
+      if (deviceBox.isConnected) renderBtDeviceList(deviceBox, res.devices, id);
+    })
     .catch(() => {});
 }
 
@@ -519,6 +560,10 @@ async function renderClaudeSupportPanel(id, step, el) {
     return;
   }
   if (!res.available) return;
+  // The user may have clicked to another step while the fetch was in
+  // flight; #step-detail is a singleton, so appending now would inject
+  // this panel into whatever step is currently shown.
+  if (state.selectedId !== id || !el.isConnected) return;
 
   const links = step.guide_links || {};
   const box = document.createElement("div");
@@ -758,6 +803,7 @@ function checkItemEl(item) {
 async function loadCheckResult(id, container, statusEl) {
   try {
     const res = await api(`/api/steps/${id}/result`);
+    if (!container.isConnected) return; // user already moved to another step
     container.innerHTML = "";
     if (!res.items.length) {
       statusEl.textContent = "";
@@ -959,7 +1005,7 @@ function renderDetail(id) {
   if (step.type === "script_with_precheck" && !running && step.status !== "done" && step.status !== "skipped") {
     api(`/api/steps/${id}/precheck`)
       .then((pre) => {
-        if (pre.needed) renderPrecheck(id, pre, precheckContainer);
+        if (pre.needed && precheckContainer.isConnected) renderPrecheck(id, pre, precheckContainer);
       })
       .catch(() => {});
   }
