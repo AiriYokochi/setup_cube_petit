@@ -70,7 +70,16 @@ webapp/
 4. ROS導入 (`setup_ros.bash`、既存フォルダ検知でスキップ/削除して再実行を選択可能)
 5. 再起動誘導(再起動後にもう一度 `run.sh` を実行すると続きから再開)
 
-デバイス設定・動作確認・petit導入(Phase 2)、自動起動設定(Phase 3)は今後の対応です。
+## Phase 2 の対象ステップ
+
+6. デバイス設定 (`setup_devices.bash`。Wi-Fi優先設定/スピーカー(SoundBlaster)/IMU/CAN/RealSense
+   をON/OFFで選択。既存の toggle_script 型をそのまま流用)
+7. Bluetoothコントローラ接続(`bluetoothctl` をラップした新規API。スキャン→一覧→接続。
+   sudo不要)
+8. センサ接続確認(`shell_scripts/udev_check.sh` を実行し、ログの `[OK]`/`[NG]` 行を
+   パースして色付き一覧表示。NGがあっても先に進める)
+
+petit導入・自動起動設定(Phase 3)は今後の対応です。
 詳細は `docs/cube_petit_setup_survey.md` と `plans/setup_webapp_plan.md`
 (orange_petit_claude リポジトリ)を参照してください。
 
