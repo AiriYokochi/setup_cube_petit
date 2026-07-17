@@ -396,10 +396,10 @@ async def get_claude_support_pubkey():
     return {"pubkey": pubkey}
 
 
-# git@github.com:owner/repo.git or https://github.com/owner/repo(.git)
-_REPO_URL_RE = re.compile(
-    r"^(git@github\.com:[\w.-]+/[\w.-]+\.git|https://github\.com/[\w.-]+/[\w.-]+(\.git)?)$"
-)
+# GitHub account (user or org) name: alphanumeric and hyphens, no leading/
+# trailing/consecutive hyphens, at most 39 chars. The repository name is NOT
+# user input -- it is fixed to <robot_namespace>_claude (repo_suggestion).
+_GH_ACCOUNT_RE = re.compile(r"^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$")
 
 _CONNECT_HINTS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"permission denied \(publickey\)", re.I),
@@ -412,22 +412,25 @@ _CONNECT_HINTS: list[tuple[re.Pattern, str]] = [
 
 
 class ConnectRepoBody(BaseModel):
-    repo_url: str
+    account: str
 
 
 @app.post("/api/steps/claude_support/connect_repo")
 async def claude_support_connect_repo(body: ConnectRepoBody):
-    repo_url = body.repo_url.strip()
-    if not _REPO_URL_RE.match(repo_url):
+    account = body.account.strip()
+    if not account or len(account) > 39 or not _GH_ACCOUNT_RE.match(account):
         raise HTTPException(
             400,
-            "リポジトリURLの形式が正しくありません。"
-            "git@github.com:アカウント/リポジトリ.git の形で入力してください。",
+            "GitHubアカウント名の形式が正しくありません。"
+            "英数字とハイフン(先頭・末尾以外)だけで、39文字以内で入力してください。",
         )
     info = _load_claude_support_info()
     if info is None or not info.get("workspace_dir"):
         raise HTTPException(409, "先にこのステップを実行してワークスペースを作成してください。")
+    repo = info.get("repo_suggestion", "cube_petit_claude")
+    repo_url = f"git@github.com:{account}/{repo}.git"
     result = await engine.connect_repo(info["workspace_dir"], repo_url)
+    result["repo_url"] = repo_url
     if not result["ok"]:
         for pattern, hint in _CONNECT_HINTS:
             if pattern.search(result["output"]):

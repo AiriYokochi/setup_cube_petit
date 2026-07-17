@@ -489,7 +489,7 @@ async function renderClaudeSupportPanel(id, step, el) {
   const repoNote = document.createElement("p");
   repoNote.className = "help";
   repoNote.textContent =
-    `リポジトリ名の例: ${res.repo_suggestion}(作業ログや記憶に内部情報が入るので、必ず private にしてください)`;
+    `リポジトリ名は ${res.repo_suggestion} にしてください(作業ログや記憶に内部情報が入るので、必ず private にしてください)`;
   sec1.appendChild(repoNote);
   const b1 = linkButton(links.new_repo);
   if (b1) sec1.appendChild(b1);
@@ -532,17 +532,30 @@ async function renderClaudeSupportPanel(id, step, el) {
   const sec3 = guideSection(3, "ワークスペースをGitHubにつなぐ");
   const connectHelp = document.createElement("p");
   connectHelp.className = "help";
-  connectHelp.textContent = "作ったリポジトリのURLを入れて「接続して送信」を押すと、接続と最初のpushまで自動で行います。";
+  connectHelp.textContent = "GitHubアカウント名(またはOrganization名)を入れて「接続して送信」を押すと、接続と最初のpushまで自動で行います。";
   sec3.appendChild(connectHelp);
 
   const connectRow = document.createElement("div");
   connectRow.className = "code-row";
-  const urlInput = document.createElement("input");
-  urlInput.type = "text";
-  urlInput.className = "repo-input";
-  urlInput.placeholder = `git@github.com:あなたのアカウント/${res.repo_suggestion}.git`;
-  connectRow.appendChild(urlInput);
+  const accountInput = document.createElement("input");
+  accountInput.type = "text";
+  accountInput.className = "repo-input";
+  accountInput.placeholder = "your-account";
+  connectRow.appendChild(accountInput);
   const connectStatus = document.createElement("div");
+
+  // Live preview of the URL that will be used, so the user can eyeball the
+  // destination before pressing the button. The repo name is fixed to
+  // <robot_namespace>_claude -- only the account is typed in.
+  const urlPreview = document.createElement("p");
+  urlPreview.className = "help url-preview";
+  const updatePreview = () => {
+    const acc = accountInput.value.trim() || "<アカウント名>";
+    urlPreview.textContent = `接続先: git@github.com:${acc}/${res.repo_suggestion}.git`;
+  };
+  updatePreview();
+  accountInput.addEventListener("input", updatePreview);
+
   const connectBtn = mkButton("primary", "接続して送信", async () => {
     connectBtn.disabled = true;
     connectBtn.textContent = "接続中...";
@@ -550,7 +563,7 @@ async function renderClaudeSupportPanel(id, step, el) {
     try {
       const r = await api(`/api/steps/${id}/connect_repo`, {
         method: "POST",
-        body: { repo_url: urlInput.value },
+        body: { account: accountInput.value },
       });
       renderConnectResult(connectStatus, r);
     } catch (err) {
@@ -562,6 +575,7 @@ async function renderClaudeSupportPanel(id, step, el) {
   });
   connectRow.appendChild(connectBtn);
   sec3.appendChild(connectRow);
+  sec3.appendChild(urlPreview);
   sec3.appendChild(connectStatus);
 
   const manual = document.createElement("details");
