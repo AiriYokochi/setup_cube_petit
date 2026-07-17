@@ -67,6 +67,14 @@ steps:
         label_ja: "VS Code (テキストエディタ) を導入する"
         type: bool
         default: false
+      - id: install_anydesk
+        label_ja: "AnyDesk (リモートサポート) を導入する"
+        type: bool
+        default: false
+        help_ja: >-
+          遠隔サポートを受ける予定がある場合だけONにしてください。
+          サポート時は、画面に出る接続依頼をあなたが承認したときだけ相手に画面が見えます
+          (無人アクセスのパスワードは設定しないでください)。反映には再起動が必要です。
 
   - id: ros_setup
     title_ja: "4. ROS導入"

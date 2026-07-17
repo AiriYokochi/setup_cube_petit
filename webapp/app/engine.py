@@ -262,8 +262,8 @@ def _build_check_cmd(script_name: str) -> str:
 def _build_toggle_cmd(
     script_name: str, input_defs: list[dict], inputs: dict
 ) -> tuple[str, Optional[str]]:
-    # setup_dev_tools.sh asks two sequential "[y/n]" confirm() prompts, in the
-    # order the inputs are declared in steps.yaml (GitKraken, then VS Code).
+    # setup_dev_tools.sh asks sequential "[y/n]" confirm() prompts, in the
+    # order the inputs are declared in steps.yaml (GitKraken, VS Code, ...).
     answers = ["y" if bool(inputs.get(d["id"], d.get("default", False))) else "n" for d in input_defs]
     if MOCK:
         chosen = ", ".join(

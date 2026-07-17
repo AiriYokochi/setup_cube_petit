@@ -497,6 +497,12 @@ function renderDetail(id) {
       input.checked = savedInputs[inputDef.id] ?? inputDef.default ?? false;
       row.appendChild(input);
       row.appendChild(label);
+      if (inputDef.help_ja) {
+        const help = document.createElement("div");
+        help.className = "help bool-help";
+        help.textContent = inputDef.help_ja;
+        row.appendChild(help);
+      }
       formGetters[inputDef.id] = () => input.checked;
     } else {
       row.appendChild(label);

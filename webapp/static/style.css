@@ -222,7 +222,8 @@ body {
   font-size: 1rem;
 }
 .input-row .help { font-size: 0.82rem; color: var(--muted); }
-.input-row.bool { flex-direction: row; align-items: center; gap: 0.6rem; }
+.input-row.bool { flex-direction: row; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.input-row.bool .bool-help { flex-basis: 100%; margin-left: 1.6rem; }
 
 .actions {
   display: flex;
