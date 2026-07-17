@@ -240,6 +240,27 @@ steps:
     skippable: false
     requires_reboot: false
 
+  - id: autostart
+    title_ja: "11. 自動起動設定"
+    description_ja: |
+      電源を入れたら自動でロボットのソフトウェア(モーター・センサなどの起動一式)が
+      立ち上がるように設定します(setup_autostart.bash を実行します)。
+      ONのまま実行すると、次回のPC起動から有効になります(いまは起動しません)。
+      あとで変えたくなったら、ON/OFFを切り替えてもう一度実行すれば反映されます。
+    type: script
+    script: setup_autostart.bash
+    needs_sudo: false
+    skippable: false
+    requires_reboot: false
+    inputs:
+      - id: autostart_enabled
+        label_ja: "電源を入れたら自動でロボットを起動する(bringup)"
+        type: bool
+        default: true
+        help_ja: >-
+          次回のPC起動から、モーター・センサが自動で立ち上がります。
+          開発用の機体はOFF推奨です。
+
 # Shown once every step above is done/skipped, as a celebration screen with
 # "what do you want to do next" buttons. This is data (not code) on purpose,
 # so the labels/links can be edited later without touching app.js/main.py.

@@ -646,6 +646,18 @@ def _extra_env_for(step_id: str, state: dict, inputs: dict) -> dict:
         return env
     if step_id == "claude_support":
         return {"ROBOT_NAMESPACE": state.get("robot_namespace") or ""}
+    if step_id == "autostart":
+        # The generated launcher bakes in the same ROS env values the
+        # env_setup step wrote to ~/.bashrc (systemd user services never
+        # read .bashrc), so pull ROS_DOMAIN_ID from that step's saved input.
+        env_inputs = state.get("inputs", {}).get("env_setup", {})
+        env = {
+            "AUTOSTART_ENABLED": "true" if inputs.get("autostart_enabled", True) else "false",
+            "ROBOT_NAMESPACE": state.get("robot_namespace") or "",
+            "ROS_DOMAIN_ID": str(env_inputs.get("ros_domain_id") or "94"),
+        }
+        env.update(ros_ws_env(state))
+        return env
     return {}
 
 
@@ -668,9 +680,9 @@ async def run_step(step_def: dict, inputs: dict, state: dict) -> StepRun:
             # Threads state into the child's env AND (in mock) seeds the
             # artifacts the post-run guide panel reads.
             cmd = _build_claude_support_cmd(step_def["script"], extra_env)
-        elif step_id == "env_setup":
-            # Exists to thread state into the child's env; show it in the
-            # mock description (see _build_env_setup_cmd).
+        elif step_id in ("env_setup", "autostart"):
+            # Both exist to thread state into the child's env; show it in
+            # the mock description (see _build_env_setup_cmd).
             cmd = _build_env_setup_cmd(step_def["script"], extra_env)
         else:
             cmd = _build_script_cmd(step_def["script"])
