@@ -401,13 +401,15 @@ async def get_claude_support_pubkey():
 # user input -- it is fixed to <robot_namespace>_claude (repo_suggestion).
 _GH_ACCOUNT_RE = re.compile(r"^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$")
 
-_CONNECT_HINTS: list[tuple[re.Pattern, str]] = [
-    (re.compile(r"permission denied \(publickey\)", re.I),
-     "公開鍵の登録(手順2)は済んでいますか?登録した鍵とこの機体の鍵が一致しているか確認してください。"),
+# (pattern, hint, is_ssh_issue) -- SSH auth failures share one wording
+# (engine.SSH_ISSUE_MESSAGE) and get recovery actions in the frontend.
+_CONNECT_HINTS: list[tuple[re.Pattern, str, bool]] = [
+    (re.compile(r"permission denied", re.I), engine.SSH_ISSUE_MESSAGE, True),
     (re.compile(r"repository not found", re.I),
-     "リポジトリ(手順1)は作成済みですか?URLのアカウント名とリポジトリ名が合っているか確認してください。"),
+     "リポジトリ(手順1)は作成済みですか?アカウント名とリポジトリ名が合っているか確認してください。"
+     "(README・License付きで作成した場合もそのまま取り込めます)", False),
     (re.compile(r"could not resolve hostname|network is unreachable", re.I),
-     "ネットワーク接続を確認してください。"),
+     "ネットワーク接続を確認してください。", False),
 ]
 
 
@@ -431,12 +433,33 @@ async def claude_support_connect_repo(body: ConnectRepoBody):
     repo_url = f"git@github.com:{account}/{repo}.git"
     result = await engine.connect_repo(info["workspace_dir"], repo_url)
     result["repo_url"] = repo_url
+    result["ssh_issue"] = False
     if not result["ok"]:
-        for pattern, hint in _CONNECT_HINTS:
+        for pattern, hint, is_ssh in _CONNECT_HINTS:
             if pattern.search(result["output"]):
                 result["hint"] = hint
+                result["ssh_issue"] = is_ssh
                 break
     return result
+
+
+@app.post("/api/steps/claude_support/precheck_repo")
+async def claude_support_precheck_repo(body: ConnectRepoBody):
+    """Pre-connect check: account exists / SSH key authenticates / repo
+    exists -- so the user can fix steps 1-2 before pressing connect."""
+    account = body.account.strip()
+    if not account or len(account) > 39 or not _GH_ACCOUNT_RE.match(account):
+        raise HTTPException(
+            400,
+            "GitHubアカウント名の形式が正しくありません。"
+            "英数字とハイフン(先頭・末尾以外)だけで、39文字以内で入力してください。",
+        )
+    info = _load_claude_support_info()
+    if info is None:
+        raise HTTPException(409, "先にこのステップを実行してワークスペースを作成してください。")
+    repo = info.get("repo_suggestion", "cube_petit_claude")
+    items = await engine.precheck_repo(account, repo)
+    return {"items": items, "all_ok": all(i["ok"] for i in items)}
 
 
 @app.get("/api/steps/{step_id}/result")

@@ -251,19 +251,19 @@ async def connect_repo(ws_dir: str, repo_url: str) -> dict:
                 f"[mock] would run in {ws_dir}:\n"
                 f"[mock]   git remote add origin {repo_url}\n"
                 "[mock]   git add -A && git commit -m 'initial workspace'\n"
+                "[mock]   git fetch origin && git merge origin/main -X ours (README/LICENSE取り込み)\n"
                 "[mock]   git push -u origin main\n"
                 "[mock] push succeeded."
             ),
         }
 
-    env = _child_env()
-    # First contact with github.com would otherwise block on the interactive
-    # host key prompt (stdin is /dev/null here, so it would just fail).
-    env["GIT_SSH_COMMAND"] = "ssh -o StrictHostKeyChecking=accept-new"
-
+    env = _git_ssh_env()
     outputs: list[str] = []
+    # Fallback identity: a freshly set up machine has no git user config yet,
+    # and both the first commit and the merge below need a committer.
+    git_id = ("-c", "user.name=Cube Petit Setup", "-c", "user.email=cube-petit-setup@localhost")
 
-    async def run(*args: str) -> int:
+    async def run(*args: str, log: bool = True) -> tuple[int, str]:
         proc = await asyncio.create_subprocess_exec(
             *args,
             cwd=ws_dir,
@@ -276,53 +276,210 @@ async def connect_repo(ws_dir: str, repo_url: str) -> dict:
             out, _ = await asyncio.wait_for(proc.communicate(), timeout=90)
         except asyncio.TimeoutError:
             proc.kill()
-            outputs.append(f"$ {' '.join(args)}\n(timed out)")
-            return 124
+            if log:
+                outputs.append(f"$ {' '.join(args)}\n(timed out)")
+            return 124, ""
         text = out.decode(errors="replace").strip()
-        outputs.append(f"$ {' '.join(args)}" + (f"\n{text}" if text else ""))
-        return proc.returncode or 0
+        if log:
+            outputs.append(f"$ {' '.join(args)}" + (f"\n{text}" if text else ""))
+        return proc.returncode or 0, text
 
     def fail() -> dict:
         return {"ok": False, "output": "\n".join(outputs)}
 
     # remote add, or update it when re-running with a corrected URL
-    if await run("git", "remote", "get-url", "origin") == 0:
-        if await run("git", "remote", "set-url", "origin", repo_url) != 0:
-            return fail()
+    code, _ = await run("git", "remote", "get-url", "origin", log=False)
+    if code == 0:
+        code, _ = await run("git", "remote", "set-url", "origin", repo_url)
     else:
-        outputs.pop()  # drop the expected get-url failure from the report
-        if await run("git", "remote", "add", "origin", repo_url) != 0:
+        code, _ = await run("git", "remote", "add", "origin", repo_url)
+    if code != 0:
+        return fail()
+
+    # The workspace is git-init'ed but has no commit yet on the first run.
+    code, _ = await run("git", "rev-parse", "--verify", "HEAD", log=False)
+    if code != 0:
+        if (await run("git", "add", "-A"))[0] != 0:
+            return fail()
+        if (await run("git", *git_id, "commit", "-m", "initial workspace"))[0] != 0:
             return fail()
 
-    # The workspace is git-init'ed but has no commit yet on the first run;
-    # commit with a fallback identity so a fresh machine (no git config)
-    # still works.
-    if await run("git", "rev-parse", "--verify", "HEAD") != 0:
-        outputs.pop()  # expected on first run, not an error worth showing
-        if await run("git", "add", "-A") != 0:
-            return fail()
-        if await run(
-            "git",
-            "-c", "user.name=Cube Petit Setup",
-            "-c", "user.email=cube-petit-setup@localhost",
-            "commit", "-m", "initial workspace",
-        ) != 0:
+    # A repository created with "Add a README file" / a license (the flow the
+    # guide recommends) already has commits on GitHub's default branch, so a
+    # plain push would be rejected as non-fast-forward. Fetch, detect the
+    # remote default branch, and merge those initial files in first.
+    if (await run("git", "fetch", "origin"))[0] != 0:
+        return fail()
+    code, sym = await run("git", "ls-remote", "--symref", "origin", "HEAD", log=False)
+    default = None
+    if code == 0:
+        for line in sym.splitlines():
+            if line.startswith("ref:") and "refs/heads/" in line:
+                default = line.split()[1].split("refs/heads/", 1)[1]
+                break
+    _, branch = await run("git", "rev-parse", "--abbrev-ref", "HEAD", log=False)
+    branch = branch or "main"
+    target = default or branch
+
+    code, _ = await run("git", "rev-parse", "--verify", f"origin/{target}", log=False)
+    if code == 0:
+        # -X ours: on add/add conflicts (README.md exists in both the
+        # workspace template and the GitHub-generated repo) keep the local
+        # template version; remote-only files (e.g. LICENSE) come in as-is.
+        if (await run(
+            "git", *git_id, "merge", f"origin/{target}",
+            "--allow-unrelated-histories", "-X", "ours",
+            "-m", "Merge initial repository files from GitHub",
+        ))[0] != 0:
             return fail()
 
-    branch_proc = await asyncio.create_subprocess_exec(
-        "git", "rev-parse", "--abbrev-ref", "HEAD",
-        cwd=ws_dir,
-        stdin=asyncio.subprocess.DEVNULL,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
-        env=env,
-    )
-    out, _ = await branch_proc.communicate()
-    branch = out.decode(errors="replace").strip() or "main"
+    # Align the local branch name with the remote default (master vs main).
+    if branch != target:
+        if (await run("git", "branch", "-m", target))[0] != 0:
+            return fail()
 
-    if await run("git", "push", "-u", "origin", branch) != 0:
+    if (await run("git", "push", "-u", "origin", target))[0] != 0:
         return fail()
     return {"ok": True, "output": "\n".join(outputs)}
+
+
+def _git_ssh_env() -> dict:
+    """Child env for network git/ssh calls: never block on an interactive
+    prompt (host key confirmation, password) -- fail visibly instead."""
+    env = _child_env()
+    env["GIT_SSH_COMMAND"] = "ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
+    return env
+
+
+_SSH_AUTH_OK_RE = re.compile(r"Hi ([A-Za-z0-9-]+)! You've successfully authenticated")
+
+# Unified wording for any SSH-authentication failure (precheck item 2 and
+# connect_repo/push): the frontend also shows recovery actions next to it.
+SSH_ISSUE_MESSAGE = (
+    "SSH鍵の問題です。手順2の「公開鍵の登録」がきちんとできているか、もう一度確認してください。"
+)
+
+
+async def _run_once(args: list[str], timeout: int) -> tuple[int, str]:
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        env=_git_ssh_env(),
+    )
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        return 124, "(timed out)"
+    return proc.returncode or 0, out.decode(errors="replace").strip()
+
+
+def _github_account_exists(account: str) -> tuple[Optional[bool], str]:
+    """(exists, message). exists=None means the check itself failed."""
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(
+        f"https://api.github.com/users/{account}",
+        headers={"User-Agent": "cube-petit-setup"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5):
+            return True, f"アカウント {account} が見つかりました。"
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False, f"アカウント {account} が見つかりません(入力ミスはありませんか?)。"
+        return None, f"アカウントの確認ができませんでした(HTTP {e.code})。そのまま接続を試しても構いません。"
+    except Exception:
+        return None, "アカウントの確認ができませんでした(ネットワークエラー)。接続を確認してください。"
+
+
+async def precheck_repo(account: str, repo: str) -> list[dict]:
+    """Pre-connect connectivity check, one result item per stage:
+    GitHub account exists / this machine's SSH key authenticates /
+    the target repository exists. Items: {id, ok, warn, message, ssh_issue}.
+    ok=None renders as a warning (check inconclusive)."""
+    if MOCK:
+        bad = "ng" in account
+        return [
+            {"id": "account", "ok": not bad, "warn": False, "ssh_issue": False,
+             "message": (f"アカウント {account} が見つかりません(入力ミスはありませんか?)。" if bad
+                         else f"アカウント {account} が見つかりました。")},
+            {"id": "ssh", "ok": not bad, "warn": False, "ssh_issue": bad,
+             "message": (SSH_ISSUE_MESSAGE if bad
+                         else f"この機体の鍵は {account} として認証されています。")},
+            {"id": "repo", "ok": not bad, "warn": False, "ssh_issue": False,
+             "message": (f"リポジトリが見つかりません。手順1で作成しましたか?(名前: {repo})" if bad
+                         else f"リポジトリ {account}/{repo} が見つかりました。")},
+        ]
+
+    items: list[dict] = []
+
+    # 1. account exists (unauthenticated GitHub API)
+    exists, message = await asyncio.to_thread(_github_account_exists, account)
+    items.append({
+        "id": "account",
+        "ok": exists is not False,
+        "warn": exists is None,
+        "ssh_issue": False,
+        "message": message,
+    })
+
+    # 2. SSH key authenticates against github.com. ssh -T exits 1 even on
+    # success (GitHub offers no shell), so parse the greeting instead.
+    code, text = await _run_once(
+        ["ssh", "-T", "git@github.com",
+         "-o", "StrictHostKeyChecking=accept-new",
+         "-o", "BatchMode=yes",
+         "-o", "ConnectTimeout=5"],
+        timeout=15,
+    )
+    m = _SSH_AUTH_OK_RE.search(text)
+    if m:
+        auth_user = m.group(1)
+        if auth_user.lower() != account.lower():
+            items.append({
+                "id": "ssh", "ok": True, "warn": True, "ssh_issue": False,
+                "message": (
+                    f"この機体の鍵は {auth_user} として認証されています。"
+                    f"リポジトリは {auth_user} 側に作るか、アカウント名を合わせてください。"
+                ),
+            })
+        else:
+            items.append({
+                "id": "ssh", "ok": True, "warn": False, "ssh_issue": False,
+                "message": f"この機体の鍵は {auth_user} として認証されています。",
+            })
+    elif re.search(r"permission denied", text, re.I):
+        items.append({"id": "ssh", "ok": False, "warn": False, "ssh_issue": True,
+                      "message": SSH_ISSUE_MESSAGE})
+    else:
+        items.append({
+            "id": "ssh", "ok": False, "warn": False, "ssh_issue": False,
+            "message": f"GitHubへのSSH接続に失敗しました。ネットワーク接続を確認してください。({text[:120]})",
+        })
+
+    # 3. the target repository exists (over the same SSH transport)
+    code, text = await _run_once(
+        ["git", "ls-remote", f"git@github.com:{account}/{repo}.git", "HEAD"],
+        timeout=20,
+    )
+    if code == 0:
+        items.append({"id": "repo", "ok": True, "warn": False, "ssh_issue": False,
+                      "message": f"リポジトリ {account}/{repo} が見つかりました。"})
+    elif re.search(r"repository not found", text, re.I):
+        items.append({"id": "repo", "ok": False, "warn": False, "ssh_issue": False,
+                      "message": f"リポジトリが見つかりません。手順1で作成しましたか?(名前: {repo})"})
+    elif re.search(r"permission denied", text, re.I):
+        items.append({"id": "repo", "ok": False, "warn": False, "ssh_issue": True,
+                      "message": SSH_ISSUE_MESSAGE})
+    else:
+        items.append({"id": "repo", "ok": False, "warn": False, "ssh_issue": False,
+                      "message": f"リポジトリの確認に失敗しました。({text[:120]})"})
+
+    return items
 
 
 def _mock_check_cmd() -> str:

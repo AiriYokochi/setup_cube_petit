@@ -437,13 +437,35 @@ function codeRow(container, labelText, command) {
   container.appendChild(row);
 }
 
-function renderConnectResult(container, r) {
+// Recovery actions shown next to any SSH-authentication failure: copy the
+// public key again and jump straight to GitHub's key registration page.
+function sshRecoveryActions(id, links) {
+  const row = document.createElement("div");
+  row.className = "guide-links ssh-recovery";
+  const keyBtn = mkButton("primary copy-btn", "公開鍵をコピー", async () => {
+    try {
+      const r = await api(`/api/steps/${id}/pubkey`);
+      await copyText(r.pubkey, keyBtn);
+    } catch (err) {
+      alert("公開鍵を取得できませんでした: " + err.message);
+    }
+  });
+  row.appendChild(keyBtn);
+  const b = linkButton((links || {}).ssh_keys);
+  if (b) row.appendChild(b);
+  return row;
+}
+
+function renderConnectResult(container, r, id, links) {
   container.innerHTML = "";
   const box = document.createElement("div");
   box.className = "connect-status " + (r.ok ? "ok" : "fail");
   box.textContent = r.ok
     ? "接続してpushしました 🎉 GitHub側にワークスペースが入っています。"
     : "接続できませんでした。" + (r.hint ? " " + r.hint : "");
+  if (!r.ok && r.ssh_issue) {
+    box.appendChild(sshRecoveryActions(id, links));
+  }
   container.appendChild(box);
   if (r.output) {
     const details = document.createElement("details");
@@ -456,6 +478,36 @@ function renderConnectResult(container, r) {
     pre.textContent = r.output;
     details.appendChild(pre);
     container.appendChild(details);
+  }
+}
+
+function renderPrecheckRepoResult(container, res, id, links) {
+  container.innerHTML = "";
+  const ul = document.createElement("ul");
+  ul.className = "check-list";
+  res.items.forEach((item) => {
+    const li = document.createElement("li");
+    const warn = item.warn || item.ok === null;
+    li.className = "check-item " + (warn ? "warn" : item.ok ? "ok" : "ng");
+    const mark = document.createElement("span");
+    mark.className = "check-mark";
+    mark.textContent = warn ? "!" : item.ok ? "✓" : "✗";
+    li.appendChild(mark);
+    const label = document.createElement("span");
+    label.className = "check-label";
+    label.textContent = item.message;
+    li.appendChild(label);
+    if (item.ssh_issue) {
+      li.appendChild(sshRecoveryActions(id, links));
+    }
+    ul.appendChild(li);
+  });
+  container.appendChild(ul);
+  if (res.all_ok) {
+    const p = document.createElement("p");
+    p.className = "help precheck-all-ok";
+    p.textContent = "すべてOKです。「接続して送信」で仕上げてください。";
+    container.appendChild(p);
   }
 }
 
@@ -491,6 +543,11 @@ async function renderClaudeSupportPanel(id, step, el) {
   repoNote.textContent =
     `リポジトリ名は ${res.repo_suggestion} にしてください(作業ログや記憶に内部情報が入るので、必ず private にしてください)`;
   sec1.appendChild(repoNote);
+  const repoOptions = document.createElement("p");
+  repoOptions.className = "help";
+  repoOptions.textContent =
+    "作成画面では「Add a README file」にチェックを入れてください。License は Apache License 2.0 を選ぶのがおすすめです(CubePetit系リポジトリと同じ)。どちらも手順3の接続がそのまま取り込みます。";
+  sec1.appendChild(repoOptions);
   const b1 = linkButton(links.new_repo);
   if (b1) sec1.appendChild(b1);
   box.appendChild(sec1);
@@ -556,6 +613,27 @@ async function renderClaudeSupportPanel(id, step, el) {
   updatePreview();
   accountInput.addEventListener("input", updatePreview);
 
+  const precheckStatus = document.createElement("div");
+
+  const checkBtn = mkButton("secondary", "チェック", async () => {
+    checkBtn.disabled = true;
+    checkBtn.textContent = "確認中...";
+    precheckStatus.innerHTML = "";
+    try {
+      const r = await api(`/api/steps/${id}/precheck_repo`, {
+        method: "POST",
+        body: { account: accountInput.value },
+      });
+      renderPrecheckRepoResult(precheckStatus, r, id, links);
+    } catch (err) {
+      renderConnectResult(precheckStatus, { ok: false, output: "", hint: err.message }, id, links);
+    } finally {
+      checkBtn.disabled = false;
+      checkBtn.textContent = "チェック";
+    }
+  });
+  connectRow.appendChild(checkBtn);
+
   const connectBtn = mkButton("primary", "接続して送信", async () => {
     connectBtn.disabled = true;
     connectBtn.textContent = "接続中...";
@@ -565,9 +643,9 @@ async function renderClaudeSupportPanel(id, step, el) {
         method: "POST",
         body: { account: accountInput.value },
       });
-      renderConnectResult(connectStatus, r);
+      renderConnectResult(connectStatus, r, id, links);
     } catch (err) {
-      renderConnectResult(connectStatus, { ok: false, output: "", hint: err.message });
+      renderConnectResult(connectStatus, { ok: false, output: "", hint: err.message }, id, links);
     } finally {
       connectBtn.disabled = false;
       connectBtn.textContent = "接続して送信";
@@ -576,6 +654,7 @@ async function renderClaudeSupportPanel(id, step, el) {
   connectRow.appendChild(connectBtn);
   sec3.appendChild(connectRow);
   sec3.appendChild(urlPreview);
+  sec3.appendChild(precheckStatus);
   sec3.appendChild(connectStatus);
 
   const manual = document.createElement("details");

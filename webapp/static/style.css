@@ -383,6 +383,12 @@ button.link-btn { border-style: dashed; }
 .connect-status.fail { background: #fef2f2; border: 1px solid #fca5a5; color: #7f1d1d; }
 details.manual-fallback { margin-top: 0.5rem; }
 details.manual-fallback > summary { cursor: pointer; font-size: 0.9rem; color: var(--muted); }
+/* pre-connect check: warning state (inconclusive / account mismatch) */
+.check-item.warn { background: rgba(217, 119, 6, 0.10); }
+.check-item.warn .check-mark { color: var(--accent); }
+.ssh-recovery { margin-top: 0.4rem; }
+.connect-status .ssh-recovery { margin-top: 0.5rem; }
+.precheck-all-ok { color: var(--ok); font-weight: 600; }
 
 /* --- sensor connection check (step 8) --------------------------------------- */
 
