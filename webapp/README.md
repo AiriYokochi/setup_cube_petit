@@ -74,11 +74,15 @@ webapp/
 
 ## Phase 2 の対象ステップ
 
-6. デバイス設定 (`setup_devices.bash`。Wi-Fi優先設定/スピーカー(SoundBlaster)/IMU/CAN/RealSense
+6. 環境設定 (`setup_bashrc.bash`。ROS_DOMAIN_ID・RMW_IMPLEMENTATION・CycloneDDS設定
+   (`config/cyclonedds.xml` の配布 + sysctl での受信バッファ拡大)と、01_BRING などの
+   起動エイリアスを ~/.bashrc にマーカー付きブロックで冪等に書き込む。個体名は
+   ステップ1の保存値をエンジンが自動で渡す)
+7. デバイス設定 (`setup_devices.bash`。Wi-Fi優先設定/スピーカー(SoundBlaster)/IMU/CAN/RealSense
    をON/OFFで選択。既存の toggle_script 型をそのまま流用)
-7. Bluetoothコントローラ接続(`bluetoothctl` をラップした新規API。スキャン→一覧→接続。
+8. Bluetoothコントローラ接続(`bluetoothctl` をラップした新規API。スキャン→一覧→接続。
    sudo不要)
-8. センサ接続確認(`shell_scripts/udev_check.sh` を実行し、ログの `[OK]`/`[NG]` 行を
+9. センサ接続確認(`shell_scripts/udev_check.sh` を実行し、ログの `[OK]`/`[NG]` 行を
    パースして色付き一覧表示。NGがあっても先に進める)
 
 ROSワークスペースについて: ステップ4(ROS導入)は既存の作業跡を検知すると、状況に応じて

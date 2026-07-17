@@ -106,8 +106,35 @@ steps:
     skippable: false
     requires_reboot: true
 
+  - id: env_setup
+    title_ja: "6. 環境設定"
+    description_ja: |
+      ROSの通信設定(ROS_DOMAIN_ID・RMW/CycloneDDS)と、よく使うコマンドのエイリアス
+      (01_BRING など)を ~/.bashrc にまとめて書き込みます(setup_bashrc.bash を実行します)。
+      あわせて、ROS 2通信(CycloneDDS)の推奨設定ファイルもこの機体に配布します。
+    type: script
+    script: setup_bashrc.bash
+    needs_sudo: true
+    skippable: false
+    requires_reboot: false
+    inputs:
+      - id: ros_domain_id
+        label_ja: "ROS_DOMAIN_ID"
+        type: text
+        default: "94"
+        required: true
+        pattern: "^[0-9]{1,3}$"
+        help_ja: "複数台を同じ場所で動かす場合は個体ごとに変えてください。"
+        error_ja: "ROS_DOMAIN_ID は0〜999の半角数字で入力してください。"
+      - id: openai_api_key
+        label_ja: "OpenAI APIキー(任意)"
+        type: text
+        default: ""
+        required: false
+        help_ja: "AI会話機能に必要です。あとから ~/.bashrc でも設定できます。"
+
   - id: devices
-    title_ja: "6. デバイス設定"
+    title_ja: "7. デバイス設定"
     description_ja: |
       機体にUSB機器(IMU・CANケーブル・LiDAR・RealSense・SoundBlaster)を接続してから実行してください。
       それぞれの項目はON/OFFで選べます(setup_devices.bash を実行します)。
@@ -140,7 +167,7 @@ steps:
         default: true
 
   - id: bt_controller
-    title_ja: "7. Bluetoothコントローラ接続"
+    title_ja: "8. Bluetoothコントローラ接続"
     description_ja: |
       ロボットを操作するコントローラをBluetoothでペアリングします。
       コントローラをペアリングモードにしてください(ボタン長押し)。
@@ -152,7 +179,7 @@ steps:
     requires_reboot: false
 
   - id: device_check
-    title_ja: "8. センサ接続確認"
+    title_ja: "9. センサ接続確認"
     description_ja: |
       IMU・CAN・LiDAR・Wi-Fi・SoundBlaster・RealSense・Bluetoothコントローラが
       正しく認識されているか、まとめて確認します(udev_check.sh を実行します)。

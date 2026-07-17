@@ -35,6 +35,20 @@ source setup_ros.bash
 - `setup_ros.bash`: asks for your sudo password, and there are a few points where it waits for Enter.
 - **Reboot once this finishes** (to apply the dialout/video group permissions — required before the next step).
 
+After rebooting, set `ROS_DOMAIN_ID` / `RMW_IMPLEMENTATION` / CycloneDDS config and the launch
+aliases (01_BRING, etc.) in `~/.bashrc` (`setup_ros.bash` no longer does this — see Issue #5):
+
+```bash
+ROBOT_NAMESPACE=cube_petit_yellow ROS_DOMAIN_ID=94 ./setup_bashrc.bash
+source ~/.bashrc
+```
+
+- `ROBOT_NAMESPACE` is the individual name you chose in step ①; change `ROS_DOMAIN_ID` per
+  individual if you run several Cube petits in the same place (both are required — it exits
+  with an error if either is missing).
+- To use the conversation feature, also pass `OPENAI_API_KEY=sk-...`, or edit `~/.bashrc`
+  directly afterwards.
+
 ### ③ Set up devices (after rebooting)
 
 ```bash
@@ -96,5 +110,6 @@ See [docker/README.md](docker/README.md) (Japanese) for usage: Gazebo simulation
 | --- | --- |
 | `setup_pc.bash` | Wallpaper, Chrome install, hide side bar, power settings, etc. |
 | `setup_dev_tools.sh` | (Optional) Install GitKraken and VS Code |
-| `setup_ros.bash` | Install ROS2 Jazzy and the `cube_petit_ros` repository |
+| `setup_ros.bash` | Install ROS2 Jazzy and the `cube_petit_ros` repository (`--build-only` to just rebuild; `CUBE_PETIT_ROS_WS` to install into a different workspace) |
+| `setup_bashrc.bash` | Set `ROS_DOMAIN_ID`, CycloneDDS config, and launch aliases in `~/.bashrc` |
 | `setup_devices.bash` | Set up Wifi, Audio, IMU, CAN, Realsense |

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CycloneDDS xmlns="https://cdds.io/config" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+  <Domain Id="any">
+    <General>
+      <Interfaces>
+        <NetworkInterface autodetermine="true"/>
+      </Interfaces>
+
+      <MaxMessageSize>65500B</MaxMessageSize>
+      <!-- Data over unicast only; multicast only for discovery (SPDP).
+           Keeps another robot's sensor data on the same WiFi/domain from
+           flooding every local node's receive socket. (2026-07-14) -->
+      <AllowMulticast>spdp</AllowMulticast>
+    </General>
+    <!-- Requires net.core.rmem_max >= 16MB (set 2026-07-14; persist via /etc/sysctl.d).
+         slam_toolbox/nav2 were dropping UDP packets with the default buffer. -->
+    <Internal>
+      <SocketReceiveBufferSize min="16MB"/>
+    </Internal>
+    <!-- <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <MaxAutoParticipantIndex>10000</MaxAutoParticipantIndex>
+    </Discovery> -->
+    <Discovery>
+      <ParticipantIndex>none</ParticipantIndex>
+    </Discovery>
+  </Domain>
+</CycloneDDS>

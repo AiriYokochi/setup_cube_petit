@@ -194,6 +194,21 @@ def _build_script_cmd(script_name: str, *, args: str = "") -> str:
     return _cmd_or_mock(real_cmd, f"bash {script_name}{suffix}", 3)
 
 
+def _build_env_setup_cmd(script_name: str, extra_env: dict) -> str:
+    """Like _build_script_cmd, but the mock description also shows the
+    env vars the real script would receive (API key redacted), since this
+    step's whole point is threading state (robot_namespace, saved inputs)
+    into the child's environment -- worth surfacing when verifying mock runs."""
+    real_cmd = f"bash {shlex.quote(str(script_path(script_name)))}"
+    if not MOCK:
+        return real_cmd
+    redacted = dict(extra_env)
+    if redacted.get("OPENAI_API_KEY"):
+        redacted["OPENAI_API_KEY"] = "***"
+    shown = ", ".join(f"{k}={v}" for k, v in redacted.items())
+    return _mock_command(f"{script_name} (env: {shown})", 2)
+
+
 def _mock_check_cmd() -> str:
     """A fake udev_check.sh-like log: same "[OK]"/"[NG]" line shape as the
     real script (see shell_scripts/udev_check.sh), colored the same way,
@@ -293,10 +308,20 @@ def ros_ws_env(state: dict) -> dict:
 
 def _extra_env_for(step_id: str, state: dict, inputs: dict) -> dict:
     """Per-step environment overrides for the child process, layered on top
-    of _child_env(). Centralizes cases where a step needs values that live
-    elsewhere in state rather than the server's own environment."""
+    of _child_env(). Centralizes the two cases where a step needs values
+    that live elsewhere in state (a previous step's saved input, or this
+    step's own saved input) rather than the server's own environment."""
     if step_id == "ros_setup":
         return ros_ws_env(state)
+    if step_id == "env_setup":
+        env = {
+            "ROBOT_NAMESPACE": state.get("robot_namespace") or "",
+            "ROS_DOMAIN_ID": str(inputs.get("ros_domain_id") or "94"),
+        }
+        api_key = inputs.get("openai_api_key")
+        if api_key:
+            env["OPENAI_API_KEY"] = str(api_key)
+        return env
     return {}
 
 
@@ -315,7 +340,10 @@ async def run_step(step_def: dict, inputs: dict, state: dict) -> StepRun:
     if step_type == "prereq_check":
         return await start_command(step_id, _build_prereq_cmd(), cwd=REPO_ROOT)
     if step_type in ("script", "script_with_precheck"):
-        cmd = _build_script_cmd(step_def["script"])
+        if step_id == "env_setup":
+            cmd = _build_env_setup_cmd(step_def["script"], extra_env)
+        else:
+            cmd = _build_script_cmd(step_def["script"])
         return await start_command(step_id, cmd, cwd=REPO_ROOT, extra_env=extra_env)
     if step_type == "toggle_script":
         cmd, stdin_text = _build_toggle_cmd(step_def["script"], step_def["inputs"], inputs)

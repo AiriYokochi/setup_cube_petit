@@ -75,7 +75,8 @@ grep -qxF 'export PATH="$HOME/.local/bin:$PATH"' ~/.bashrc || echo 'export PATH=
 echo -e '\e[1;31m == Install uv == \e[m'
 curl -Ls https://astral.sh/uv/install.sh | bash
 # uv installs to ~/.local/bin, which is already added to PATH above
-grep -qxF "export ROS_DOMAIN_ID=94" ~/.bashrc || echo "export ROS_DOMAIN_ID=94" >> ~/.bashrc
+# ROS_DOMAIN_ID / RMW_IMPLEMENTATION are configured by the webapp's
+# "6. Environment setup" step (setup_bashrc.bash), not here -- see Issue #5.
 export PATH="$HOME/.local/bin:$PATH"
 source /opt/ros/jazzy/setup.bash
 
