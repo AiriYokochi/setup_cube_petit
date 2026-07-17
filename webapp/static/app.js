@@ -1216,6 +1216,98 @@ function renderDetail(id) {
   }
 }
 
+// --- bug report ("不具合を報告") ---------------------------------------------
+
+const REPORT_REPO_URL = "https://github.com/sbgisen/cube_petit_setup";
+// GitHub rejects very long URLs (~8KB); keep the prefill comfortably under.
+const REPORT_URL_LIMIT = 7000;
+
+function reportBody(symptom, diagnostics) {
+  return `## 症状\n\n${symptom.trim()}\n\n## 診断情報\n\n\`\`\`\n${diagnostics.trim()}\n\`\`\`\n`;
+}
+
+function reportIssueUrl(symptom, diagnostics) {
+  const title = (symptom.trim().split("\n")[0] || "セットアップで不具合").slice(0, 100);
+  let url =
+    `${REPORT_REPO_URL}/issues/new?title=${encodeURIComponent(title)}` +
+    `&body=${encodeURIComponent(reportBody(symptom, diagnostics))}`;
+  if (url.length > REPORT_URL_LIMIT) {
+    // Trim the diagnostics until the URL fits; note the cut in the body.
+    let diag = diagnostics;
+    while (url.length > REPORT_URL_LIMIT && diag.length > 200) {
+      diag = diag.slice(0, Math.floor(diag.length * 0.8));
+      url =
+        `${REPORT_REPO_URL}/issues/new?title=${encodeURIComponent(title)}` +
+        `&body=${encodeURIComponent(reportBody(symptom, diag + "\n(長いため以降を省略)"))}`;
+    }
+  }
+  return url;
+}
+
+async function openReportPanel() {
+  const overlay = document.getElementById("report-overlay");
+  overlay.hidden = false;
+  overlay.innerHTML = "";
+
+  const panel = document.createElement("div");
+  panel.className = "report-panel";
+  overlay.appendChild(panel);
+
+  const h2 = document.createElement("h2");
+  h2.textContent = "不具合を報告";
+  panel.appendChild(h2);
+
+  const symptomLabel = document.createElement("label");
+  symptomLabel.textContent = "どんな不具合ですか?(必須。1行目がタイトルになります)";
+  panel.appendChild(symptomLabel);
+  const symptom = document.createElement("textarea");
+  symptom.className = "report-symptom";
+  symptom.placeholder = "例: ステップ7のデバイス設定を実行すると、スピーカーの設定で失敗します";
+  panel.appendChild(symptom);
+
+  const diagLabel = document.createElement("label");
+  diagLabel.textContent = "自動で添付される診断情報(編集できます。個人情報が無いか確認してください)";
+  panel.appendChild(diagLabel);
+  const diag = document.createElement("textarea");
+  diag.className = "report-diagnostics";
+  diag.value = "読み込み中...";
+  panel.appendChild(diag);
+  api("/api/report/draft")
+    .then((r) => { diag.value = r.diagnostics || ""; })
+    .catch(() => { diag.value = "(診断情報を取得できませんでした)"; });
+
+  const note = document.createElement("p");
+  note.className = "report-note";
+  note.textContent =
+    "「GitHubで報告する」には無料のGitHubアカウントが必要です。投稿画面で内容を確認してから送信してください。" +
+    "GitHubを使わない場合は「内容をコピー」でメール等に貼り付けられます。";
+  panel.appendChild(note);
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  panel.appendChild(actions);
+
+  const ghBtn = mkButton("primary", "GitHubで報告する", () => {
+    window.open(reportIssueUrl(symptom.value, diag.value), "_blank");
+  });
+  ghBtn.disabled = true;
+  actions.appendChild(ghBtn);
+  symptom.addEventListener("input", () => {
+    ghBtn.disabled = !symptom.value.trim();
+  });
+
+  const copyBtn = mkButton("secondary", "内容をコピー", () => {
+    copyText(reportBody(symptom.value || "(症状未記入)", diag.value), copyBtn);
+  });
+  actions.appendChild(copyBtn);
+
+  const closeBtn = mkButton("secondary", "閉じる", () => {
+    overlay.hidden = true;
+    overlay.innerHTML = "";
+  });
+  actions.appendChild(closeBtn);
+}
+
 async function init() {
   await loadState();
   if (state.data.steps.length) {
@@ -1226,6 +1318,8 @@ async function init() {
   // Fetch upstream-update status in the background (may take a few seconds
   // on first load while the server finishes its git fetch).
   loadUpdates();
+
+  document.getElementById("report-button").addEventListener("click", openReportPanel);
 
   // Safety-net poll: only kicks in if something is running without a live
   // SSE connection (e.g. after a dropped connection during pc_setup's gdm
