@@ -542,6 +542,29 @@ async def update_robot():
     return {"status": "started", "run_key": step_def["id"]}
 
 
+# --- installed-tool detection (dev_tools step) -------------------------------
+
+@app.get("/api/steps/{step_id}/installed")
+async def get_installed(step_id: str):
+    """For bool inputs that declare detect_cmd: whether that command already
+    exists on this machine, so the UI can show 'already installed' instead
+    of a plain install checkbox."""
+    import shutil
+
+    step_def = _get_step_or_404(step_id)
+    result = {}
+    for d in step_def.get("inputs", []):
+        cmd = d.get("detect_cmd")
+        if not cmd:
+            continue
+        if engine.MOCK:
+            # Deterministic fixture: VS Code "installed", the rest not.
+            result[d["id"]] = cmd == "code"
+        else:
+            result[d["id"]] = shutil.which(cmd) is not None
+    return {"installed": result}
+
+
 # --- log streaming (SSE) ---------------------------------------------------
 
 @app.get("/api/runs/{run_key}/stream")

@@ -154,6 +154,9 @@ body {
   color: #7a5b00;
 }
 
+/* Layout comes from the shared .bool-help rule; this only recolors it. */
+.installed-hint { color: var(--ok); }
+
 
 .layout {
   display: grid;

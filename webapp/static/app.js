@@ -942,6 +942,29 @@ function renderRobotUpdate(id, el, actions) {
   actions.appendChild(btn);
 }
 
+// --- installed-tool detection (dev_tools) ------------------------------------
+
+function applyInstalledInfo(id, boolRows) {
+  // Only steps that declare detect_cmd on some input need the probe at all.
+  if (!Object.keys(boolRows).length) return;
+  api(`/api/steps/${id}/installed`)
+    .then((res) => {
+      if (state.selectedId !== id) return;
+      Object.entries(res.installed || {}).forEach(([inputId, installed]) => {
+        const row = boolRows[inputId];
+        if (!row || !installed || !row.row.isConnected) return;
+        // Already installed: default the checkbox to OFF (checking it means
+        // "reinstall") and say so.
+        row.input.checked = false;
+        const hint = document.createElement("div");
+        hint.className = "help bool-help installed-hint";
+        hint.textContent = "✓ インストール済みです(もう一度入れ直す場合はチェックしてください)";
+        row.row.appendChild(hint);
+      });
+    })
+    .catch(() => {});
+}
+
 // --- completion celebration screen ------------------------------------------
 
 function buildCelebrationPanel() {
@@ -1016,6 +1039,7 @@ function renderDetail(id) {
 
   const savedInputs = (state.data.inputs && state.data.inputs[id]) || {};
   const formGetters = {};
+  const boolRows = {}; // detect_cmd inputs only, for applyInstalledInfo()
   (step.inputs || []).forEach((inputDef) => {
     const row = document.createElement("div");
     row.className = "input-row" + (inputDef.type === "bool" ? " bool" : "");
@@ -1034,6 +1058,7 @@ function renderDetail(id) {
         help.textContent = inputDef.help_ja;
         row.appendChild(help);
       }
+      if (inputDef.detect_cmd) boolRows[inputDef.id] = { row, input };
       formGetters[inputDef.id] = () => input.checked;
     } else {
       row.appendChild(label);
@@ -1113,6 +1138,9 @@ function renderDetail(id) {
       actions.appendChild(skipBtn);
     }
   }
+
+  // "already installed" hints for tools with a detect_cmd probe.
+  applyInstalledInfo(id, boolRows);
 
   // Robot-source update action (shown on the ROS step when behind upstream).
   if (id === "ros_setup" && !running) {
