@@ -63,6 +63,8 @@ alias 04_TALK_START="ros2 service call /${ROBOT_NAMESPACE}/enable_realtime_conve
 alias 04_TALK_FINISH="ros2 service call /${ROBOT_NAMESPACE}/enable_realtime_conversation std_srvs/srv/SetBool \"data: false\""
 # sound:=true でSE再生、swing:=true で首振り動作を有効化できます(いずれもデフォルトfalse)
 alias 05_ANIMA="ros2 launch cube_petit_anima anima.launch.py"
+# 更新チェック: キャッシュを即表示するだけ(シェル起動は遅くしない)。再確認は裏で数時間おき
+[[ \$- == *i* ]] && bash ${REPO_ROOT}/shell_scripts/check_updates.sh --bashrc
 $MARK_END
 EOF
 

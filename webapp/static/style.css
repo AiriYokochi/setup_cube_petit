@@ -116,6 +116,48 @@ body {
   text-align: right;
 }
 
+/* --- update banner + re-run badge (update feature v1) --------------------- */
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  max-width: 1100px;
+  margin: 0.8rem auto 0;
+  padding: 0.7rem 1rem;
+  border: 1px solid #f6c453;
+  background: #fff8e1;
+  color: #7a5b00;
+  border-radius: 10px;
+}
+.update-banner-text { font-weight: 600; }
+.update-banner details { font-size: 0.85rem; }
+.update-banner summary { cursor: pointer; }
+.update-commits {
+  margin: 0.3rem 0 0;
+  padding-left: 1.2rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+}
+.update-banner-status { font-size: 0.85rem; }
+
+.step-badge {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: #fff8e1;
+  border: 1px solid #f6c453;
+  color: #7a5b00;
+}
+
+/* Layout comes from the shared .bool-help rule; this only recolors it. */
+.installed-hint { color: var(--ok); }
+
+
 .layout {
   display: grid;
   grid-template-columns: 280px 1fr;
@@ -492,4 +534,6 @@ details.manual-fallback > summary { cursor: pointer; font-size: 0.9rem; color: v
   .connect-status.fail { background: #3a1a1a; color: #fca5a5; border-color: #7f1d1d; }
   .celebration-box { background: linear-gradient(180deg, #2a2113 0%, #201a10 100%); border-color: #7c4a12; }
   summary { background: #242830; color: var(--text); }
+  .update-banner, .step-badge { background: #3a2c17; color: #fdba74; border-color: #7c4a12; }
+  .update-banner summary { background: transparent; }
 }

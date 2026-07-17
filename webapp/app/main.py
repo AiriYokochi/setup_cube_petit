@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import engine, state as state_mod
+from . import engine, state as state_mod, updates
 
 APP_DIR = Path(__file__).resolve().parent
 WEBAPP_DIR = APP_DIR.parent
@@ -54,6 +54,13 @@ async def _reconcile_stale_running_steps() -> None:
             changed = True
     if changed:
         state_mod.save_state(state)
+
+
+@app.on_event("startup")
+async def _prefetch_updates() -> None:
+    """Kick off the upstream-updates fetch without blocking startup; the
+    banner data is served from the cache once this lands."""
+    asyncio.create_task(updates.refresh())
 
 
 def _get_step_or_404(step_id: str) -> dict:
@@ -150,6 +157,9 @@ async def get_state():
                 **step_def,
                 "status": st.get("status", "pending"),
                 "exit_code": st.get("exit_code"),
+                # The step ran at an older commit and its script has changed
+                # since -> surface a "re-run recommended" badge.
+                "needs_rerun": updates.needs_rerun(step_def, st),
             }
         )
     all_done = bool(steps_out) and all(s["status"] in ("done", "skipped") for s in steps_out)
@@ -227,7 +237,10 @@ async def resolve_precheck(step_id: str, body: PrecheckResolveBody):
     if body.choice == "build_only":
         if engine.is_running(step_id):
             raise HTTPException(409, "step is already running")
-        state_mod.set_step_status(state, step_id, status="running", exit_code=None)
+        state_mod.set_step_status(
+            state, step_id, status="running", exit_code=None,
+            ran_at_commit=updates.repo_head(),
+        )
         run = await engine.run_build_only(step_def, state)
         asyncio.create_task(_watch_run(step_id, run))
         return {"status": "running", "run_key": step_id}
@@ -260,7 +273,10 @@ async def run_step(step_id: str, body: RunBody = Body(default=RunBody())):
         if pre["needed"]:
             raise HTTPException(409, detail={"message": "precheck_required", "precheck": pre})
 
-    state_mod.set_step_status(state, step_id, status="running", exit_code=None)
+    state_mod.set_step_status(
+        state, step_id, status="running", exit_code=None,
+        ran_at_commit=updates.repo_head(),
+    )
     run = await engine.run_step(step_def, inputs, state)
     asyncio.create_task(_watch_run(step_id, run))
     return {"status": "started", "run_key": step_id}
@@ -487,6 +503,68 @@ async def get_step_result(step_id: str):
     return {"items": items, "ok_count": ok_count, "total": len(items)}
 
 
+# --- updates (feature v1) ---------------------------------------------------
+
+@app.get("/api/updates")
+async def get_updates():
+    """Upstream status for the banner: {self, robot}, each {behind, commits}
+    (or null when that repo has no usable upstream)."""
+    cache = updates.cached()
+    if not cache.get("checked"):
+        # Startup fetch has not landed yet (or failed early): do it now.
+        cache = await updates.refresh()
+    return cache
+
+
+@app.post("/api/updates/refresh")
+async def refresh_updates():
+    return await updates.refresh()
+
+
+@app.post("/api/updates/self")
+async def update_self():
+    return await updates.update_self()
+
+
+@app.post("/api/updates/robot")
+async def update_robot():
+    """Pull the robot source and rebuild, streamed as a ros_setup step run."""
+    step_def = _get_step_or_404("ros_setup")
+    if engine.is_running(step_def["id"]):
+        raise HTTPException(409, "step is already running")
+    state = state_mod.load_state()
+    state_mod.set_step_status(
+        state, step_def["id"], status="running", exit_code=None,
+        ran_at_commit=updates.repo_head(),
+    )
+    run = await updates.run_robot_update(step_def, state)
+    asyncio.create_task(_watch_run(step_def["id"], run))
+    return {"status": "started", "run_key": step_def["id"]}
+
+
+# --- installed-tool detection (dev_tools step) -------------------------------
+
+@app.get("/api/steps/{step_id}/installed")
+async def get_installed(step_id: str):
+    """For bool inputs that declare detect_cmd: whether that command already
+    exists on this machine, so the UI can show 'already installed' instead
+    of a plain install checkbox."""
+    import shutil
+
+    step_def = _get_step_or_404(step_id)
+    result = {}
+    for d in step_def.get("inputs", []):
+        cmd = d.get("detect_cmd")
+        if not cmd:
+            continue
+        if engine.MOCK:
+            # Deterministic fixture: VS Code "installed", the rest not.
+            result[d["id"]] = cmd == "code"
+        else:
+            result[d["id"]] = shutil.which(cmd) is not None
+    return {"installed": result}
+
+
 # --- log streaming (SSE) ---------------------------------------------------
 
 @app.get("/api/runs/{run_key}/stream")
@@ -566,3 +644,26 @@ async def debug_clear(step_id: str):
         raise HTTPException(400, "only available with --mock")
     engine.mock_clear_existing(_get_step_or_404(step_id))
     return {"status": "cleared"}
+
+
+@app.post("/api/debug/mock/mark_stale/{step_id}")
+async def debug_mark_stale(step_id: str):
+    """Rewind the step's recorded ran_at_commit a few commits so the
+    needs_rerun badge can be exercised without a real upstream update."""
+    if not engine.MOCK:
+        raise HTTPException(400, "only available with --mock")
+    _get_step_or_404(step_id)
+    import subprocess
+
+    # The root commit: every script has changed since, so the badge condition
+    # is guaranteed to hold regardless of recent history.
+    out = subprocess.run(
+        ["git", "-C", str(engine.REPO_ROOT), "rev-list", "--max-parents=0", "HEAD"],
+        capture_output=True, text=True,
+    )
+    if out.returncode != 0 or not out.stdout.strip():
+        raise HTTPException(500, "could not resolve an older commit")
+    root = out.stdout.strip().splitlines()[-1]
+    state = state_mod.load_state()
+    state_mod.set_step_status(state, step_id, ran_at_commit=root)
+    return {"status": "marked", "ran_at_commit": root}

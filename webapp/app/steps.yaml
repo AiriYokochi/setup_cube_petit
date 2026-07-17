@@ -63,14 +63,19 @@ steps:
         label_ja: "GitKraken (Git GUIツール) を導入する"
         type: bool
         default: false
+        # Command probed by /api/steps/dev_tools/installed: when present the
+        # UI shows "already installed (check to reinstall)" instead.
+        detect_cmd: gitkraken
       - id: install_vscode
         label_ja: "VS Code (テキストエディタ) を導入する"
         type: bool
         default: false
+        detect_cmd: code
       - id: install_anydesk
         label_ja: "AnyDesk (リモートサポート) を導入する"
         type: bool
         default: false
+        detect_cmd: anydesk
         help_ja: >-
           遠隔サポートを受ける予定がある場合だけONにしてください。
           サポート時は、画面に出る接続依頼をあなたが承認したときだけ相手に画面が見えます

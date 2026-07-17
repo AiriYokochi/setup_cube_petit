@@ -4,6 +4,7 @@ const state = {
   data: null,
   selectedId: null,
   eventSource: null,
+  updates: null, // /api/updates result: {self, robot} upstream status
 };
 
 async function api(path, opts = {}) {
@@ -109,7 +110,8 @@ function renderStepList() {
     if (!isUnlocked(idx)) btn.classList.add("locked");
     btn.innerHTML =
       `<span class="step-icon">${statusIcon(s.status)}</span>` +
-      `<span class="step-title">${s.title_ja}</span>`;
+      `<span class="step-title">${s.title_ja}</span>` +
+      (s.needs_rerun ? '<span class="step-badge">更新あり</span>' : "");
     btn.addEventListener("click", () => selectStep(s.id));
     nav.appendChild(btn);
   });
@@ -843,6 +845,137 @@ function renderCheckStep(id, step, el, actions, running) {
   loadCheckResult(id, resultBox, statusEl);
 }
 
+// --- update banner (feature v1) ---------------------------------------------
+
+// Release notes (the tag's annotation message) when available, commit
+// summaries otherwise.
+function changeList(status) {
+  const lines = (status.notes && status.notes.length) ? status.notes : (status.commits || []);
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = "変更内容を見る";
+  details.appendChild(summary);
+  const ul = document.createElement("ul");
+  ul.className = "update-commits";
+  lines.forEach((c) => {
+    const li = document.createElement("li");
+    li.textContent = c;
+    ul.appendChild(li);
+  });
+  details.appendChild(ul);
+  return details;
+}
+
+function updateHeadline(prefix, status) {
+  return status.tag
+    ? `${prefix}に新しいリリース ${status.tag} があります`
+    : `${prefix}に更新があります(${status.behind}件)`;
+}
+
+async function loadUpdates() {
+  try {
+    state.updates = await api("/api/updates");
+  } catch (e) {
+    state.updates = null;
+  }
+  renderUpdateBanner();
+  // needs_rerun / the ros_setup update button depend on this data too.
+  if (state.selectedId) renderDetail(state.selectedId);
+}
+
+function renderUpdateBanner() {
+  const banner = document.getElementById("update-banner");
+  const self = state.updates && state.updates.self;
+  if (!self || !self.behind) {
+    banner.hidden = true;
+    banner.innerHTML = "";
+    return;
+  }
+  banner.hidden = false;
+  banner.innerHTML = "";
+
+  const text = document.createElement("span");
+  text.className = "update-banner-text";
+  text.textContent = updateHeadline("セットアップツール", self);
+  banner.appendChild(text);
+
+  banner.appendChild(changeList(self));
+
+  const status = document.createElement("span");
+  status.className = "update-banner-status";
+
+  const btn = mkButton("primary", "アップデート", async () => {
+    btn.disabled = true;
+    status.textContent = "更新中...";
+    try {
+      const r = await api("/api/updates/self", { method: "POST" });
+      if (r.ok) {
+        status.textContent = "アップデートしました。run.sh を一度止めて(Ctrl+C)、もう一度起動してください。";
+        btn.remove();
+      } else {
+        status.textContent = "更新できませんでした: " + (r.output || "");
+        btn.disabled = false;
+      }
+    } catch (err) {
+      status.textContent = "エラー: " + err.message;
+      btn.disabled = false;
+    }
+  });
+  banner.appendChild(btn);
+  banner.appendChild(status);
+}
+
+// The ros_setup step gets its own "update the robot software" action when
+// the robot source is behind upstream: pull + rebuild, streamed like a run.
+function renderRobotUpdate(id, el, actions) {
+  const robot = state.updates && state.updates.robot;
+  if (!robot || !robot.behind) return;
+
+  const box = document.createElement("div");
+  box.className = "warning-box";
+  box.textContent =
+    updateHeadline("ロボットのソフトウェア", robot) +
+    "。「ロボットソフトをアップデート」を押すと、取得して再ビルドします。";
+  box.appendChild(changeList(robot));
+  el.insertBefore(box, actions);
+
+  const btn = mkButton("primary", "ロボットソフトをアップデート", async () => {
+    btn.disabled = true;
+    try {
+      const res = await api("/api/updates/robot", { method: "POST" });
+      await loadState();
+      attachStream(res.run_key, id, { reloadOnEnd: true });
+    } catch (err) {
+      btn.disabled = false;
+      alert("エラー: " + err.message);
+    }
+  });
+  actions.appendChild(btn);
+}
+
+// --- installed-tool detection (dev_tools) ------------------------------------
+
+function applyInstalledInfo(id, boolRows) {
+  // Only steps that declare detect_cmd on some input need the probe at all.
+  if (!Object.keys(boolRows).length) return;
+  api(`/api/steps/${id}/installed`)
+    .then((res) => {
+      if (state.selectedId !== id) return;
+      Object.entries(res.installed || {}).forEach(([inputId, installed]) => {
+        const row = boolRows[inputId];
+        if (!row || !installed || !row.row.isConnected) return;
+        // Already installed: default the checkbox to OFF (checking it means
+        // "reinstall") and say so.
+        row.input.checked = false;
+        const hint = document.createElement("div");
+        hint.className = "help bool-help installed-hint";
+        hint.textContent = "✓ インストール済みです(もう一度入れ直す場合はチェックしてください)";
+        row.row.appendChild(hint);
+      });
+    })
+    .catch(() => {});
+}
+
 // --- completion celebration screen ------------------------------------------
 
 function buildCelebrationPanel() {
@@ -907,8 +1040,17 @@ function renderDetail(id) {
   statusLine.textContent = statusLabel(step.status, step.exit_code);
   el.appendChild(statusLine);
 
+  if (step.needs_rerun) {
+    const rerunNote = document.createElement("div");
+    rerunNote.className = "warning-box";
+    rerunNote.textContent =
+      "このステップの処理内容がアップデートで変わっています。「もう一度実行」で反映してください(再実行しても安全です)。";
+    el.appendChild(rerunNote);
+  }
+
   const savedInputs = (state.data.inputs && state.data.inputs[id]) || {};
   const formGetters = {};
+  const boolRows = {}; // detect_cmd inputs only, for applyInstalledInfo()
   (step.inputs || []).forEach((inputDef) => {
     const row = document.createElement("div");
     row.className = "input-row" + (inputDef.type === "bool" ? " bool" : "");
@@ -927,6 +1069,7 @@ function renderDetail(id) {
         help.textContent = inputDef.help_ja;
         row.appendChild(help);
       }
+      if (inputDef.detect_cmd) boolRows[inputDef.id] = { row, input };
       formGetters[inputDef.id] = () => input.checked;
     } else {
       row.appendChild(label);
@@ -1007,6 +1150,14 @@ function renderDetail(id) {
     }
   }
 
+  // "already installed" hints for tools with a detect_cmd probe.
+  applyInstalledInfo(id, boolRows);
+
+  // Robot-source update action (shown on the ROS step when behind upstream).
+  if (id === "ros_setup" && !running) {
+    renderRobotUpdate(id, el, actions);
+  }
+
   // For a not-yet-resolved precheck step, surface the choice up front.
   if (step.type === "script_with_precheck" && !running && step.status !== "done" && step.status !== "skipped") {
     api(`/api/steps/${id}/precheck`)
@@ -1045,6 +1196,10 @@ async function init() {
     const firstNotDone = state.data.steps.find((s) => !["done", "skipped"].includes(s.status));
     selectStep(firstNotDone ? firstNotDone.id : state.data.steps[0].id);
   }
+
+  // Fetch upstream-update status in the background (may take a few seconds
+  // on first load while the server finishes its git fetch).
+  loadUpdates();
 
   // Safety-net poll: only kicks in if something is running without a live
   // SSE connection (e.g. after a dropped connection during pc_setup's gdm
