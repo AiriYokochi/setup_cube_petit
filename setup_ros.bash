@@ -23,6 +23,9 @@ sudo apt update && sudo apt install -y ros-dev-tools
 sudo apt update
 sudo apt upgrade -y
 sudo apt install -y ros-jazzy-desktop python3-rosdep
+# witmotion_IMU_ros (pulled in via cube_petit_ros.repos) needs Qt5SerialPort
+# to build, but rosdep cannot resolve it from its package.xml.
+sudo apt install -y libqt5serialport5-dev
 grep -qxF "source /opt/ros/jazzy/setup.bash" ~/.bashrc || echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 grep -qxF "source ~/ros/install/setup.bash" ~/.bashrc || echo "source ~/ros/install/setup.bash" >> ~/.bashrc
 
