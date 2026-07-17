@@ -389,6 +389,8 @@ details.manual-fallback > summary { cursor: pointer; font-size: 0.9rem; color: v
 .ssh-recovery { margin-top: 0.4rem; }
 .connect-status .ssh-recovery { margin-top: 0.5rem; }
 .precheck-all-ok { color: var(--ok); font-weight: 600; }
+.gate-note { font-style: italic; }
+.term-fail { color: var(--fail); }
 
 /* --- sensor connection check (step 8) --------------------------------------- */
 

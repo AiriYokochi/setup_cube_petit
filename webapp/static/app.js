@@ -611,9 +611,29 @@ async function renderClaudeSupportPanel(id, step, el) {
     urlPreview.textContent = `接続先: git@github.com:${acc}/${res.repo_suggestion}.git`;
   };
   updatePreview();
-  accountInput.addEventListener("input", updatePreview);
+  accountInput.addEventListener("input", () => {
+    updatePreview();
+    // Editing the account invalidates any previous check result.
+    precheckPassed = false;
+    precheckStatus.innerHTML = "";
+    applyGate();
+  });
 
   const precheckStatus = document.createElement("div");
+
+  // The connect button stays disabled until a pre-connect check has passed
+  // all three items; editing the account re-requires a check.
+  let precheckPassed = false;
+  const GATE_HINT = "先に「チェック」を押してください";
+  const gateNote = document.createElement("p");
+  gateNote.className = "help gate-note";
+  gateNote.textContent = "先に「チェック」を押してください(3項目すべてOKになると送信できます)。";
+
+  const applyGate = () => {
+    connectBtn.disabled = !precheckPassed;
+    connectBtn.title = precheckPassed ? "" : GATE_HINT;
+    gateNote.hidden = precheckPassed;
+  };
 
   const checkBtn = mkButton("secondary", "チェック", async () => {
     checkBtn.disabled = true;
@@ -625,11 +645,14 @@ async function renderClaudeSupportPanel(id, step, el) {
         body: { account: accountInput.value },
       });
       renderPrecheckRepoResult(precheckStatus, r, id, links);
+      precheckPassed = !!r.all_ok;
     } catch (err) {
       renderConnectResult(precheckStatus, { ok: false, output: "", hint: err.message }, id, links);
+      precheckPassed = false;
     } finally {
       checkBtn.disabled = false;
       checkBtn.textContent = "チェック";
+      applyGate();
     }
   });
   connectRow.appendChild(checkBtn);
@@ -652,8 +675,10 @@ async function renderClaudeSupportPanel(id, step, el) {
     }
   });
   connectRow.appendChild(connectBtn);
+  applyGate();
   sec3.appendChild(connectRow);
   sec3.appendChild(urlPreview);
+  sec3.appendChild(gateNote);
   sec3.appendChild(precheckStatus);
   sec3.appendChild(connectStatus);
 
@@ -666,8 +691,35 @@ async function renderClaudeSupportPanel(id, step, el) {
   sec3.appendChild(manual);
   box.appendChild(sec3);
 
-  // 4. first login (interactive, so it stays a copy-paste command)
+  // 4. first login: one-click terminal on the robot's screen, with the
+  // copy-paste command kept as the manual alternative
   const sec4 = guideSection(4, "Claude Codeを起動して初回ログイン");
+  const termStatus = document.createElement("p");
+  termStatus.className = "help";
+  const termBtn = mkButton("primary", "claudeをターミナルで起動", async () => {
+    termBtn.disabled = true;
+    termStatus.classList.remove("term-fail");
+    termStatus.textContent = "起動中...";
+    try {
+      const r = await api(`/api/steps/${id}/open_terminal`, { method: "POST", body: {} });
+      termStatus.textContent = r.message || (r.ok ? "起動しました。" : "起動できませんでした。");
+      termStatus.classList.toggle("term-fail", !r.ok);
+    } catch (err) {
+      termStatus.textContent = "起動できませんでした: " + err.message + " 手動でターミナルを開いて、コピーしたコマンドを実行してください。";
+      termStatus.classList.add("term-fail");
+    } finally {
+      termBtn.disabled = false;
+    }
+  });
+  const termRow = document.createElement("div");
+  termRow.className = "guide-links";
+  termRow.appendChild(termBtn);
+  sec4.appendChild(termRow);
+  const termNote = document.createElement("p");
+  termNote.className = "help";
+  termNote.textContent = "※この機体の画面にターミナルが開きます(タブレットから操作している場合は機体の画面を見てください)。";
+  sec4.appendChild(termNote);
+  sec4.appendChild(termStatus);
   if (res.login_command) {
     codeRow(sec4, res.login_command.label_ja, res.login_command.command);
   }

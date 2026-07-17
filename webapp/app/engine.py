@@ -376,6 +376,49 @@ async def _run_once(args: list[str], timeout: int) -> tuple[int, str]:
     return proc.returncode or 0, out.decode(errors="replace").strip()
 
 
+async def open_claude_terminal(ws_dir: str) -> dict:
+    """Open a terminal ON THE ROBOT'S OWN SCREEN, running `claude` in the
+    workspace (first-login is interactive, so it cannot run inside the web
+    app). Falls back from gnome-terminal to x-terminal-emulator."""
+    if MOCK:
+        return {"ok": True, "message": "[mock] この機体の画面にターミナルを開きました(疑似)。"}
+
+    import shutil
+
+    env = _child_env()
+    manual_hint = "手動でターミナルを開いて、コピーしたコマンドを実行してください。"
+    if not env.get("DISPLAY") and not env.get("WAYLAND_DISPLAY"):
+        return {"ok": False, "message": f"この機体の画面が見つかりません。{manual_hint}"}
+
+    if shutil.which("gnome-terminal"):
+        args = ["gnome-terminal", f"--working-directory={ws_dir}",
+                "--", "bash", "-lc", "claude; exec bash"]
+    elif shutil.which("x-terminal-emulator"):
+        args = ["x-terminal-emulator", "-e",
+                f"bash -lc 'cd {shlex.quote(ws_dir)} && claude; exec bash'"]
+    else:
+        return {"ok": False, "message": f"ターミナルアプリが見つかりません。{manual_hint}"}
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            cwd=ws_dir,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            env=env,
+            start_new_session=True,  # survive a webapp server restart
+        )
+    except OSError as e:
+        return {"ok": False, "message": f"ターミナルを起動できませんでした({e})。{manual_hint}"}
+    # gnome-terminal re-spawns via its server process and exits quickly on
+    # success; only an immediate non-zero exit is a real failure.
+    await asyncio.sleep(0.5)
+    if proc.returncode not in (None, 0):
+        return {"ok": False, "message": f"ターミナルを起動できませんでした。{manual_hint}"}
+    return {"ok": True, "message": "この機体の画面にターミナルを開きました。"}
+
+
 def _github_account_exists(account: str) -> tuple[Optional[bool], str]:
     """(exists, message). exists=None means the check itself failed."""
     import urllib.error

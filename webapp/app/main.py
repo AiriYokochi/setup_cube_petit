@@ -443,6 +443,16 @@ async def claude_support_connect_repo(body: ConnectRepoBody):
     return result
 
 
+@app.post("/api/steps/claude_support/open_terminal")
+async def claude_support_open_terminal():
+    """Open a terminal running `claude` on the robot's own display (the
+    first login is interactive and cannot happen inside the web app)."""
+    info = _load_claude_support_info()
+    if info is None or not info.get("workspace_dir"):
+        raise HTTPException(409, "先にこのステップを実行してワークスペースを作成してください。")
+    return await engine.open_claude_terminal(info["workspace_dir"])
+
+
 @app.post("/api/steps/claude_support/precheck_repo")
 async def claude_support_precheck_repo(body: ConnectRepoBody):
     """Pre-connect check: account exists / SSH key authenticates / repo
