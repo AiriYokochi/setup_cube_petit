@@ -98,8 +98,14 @@ webapp/
    をON/OFFで選択。既存の toggle_script 型をそのまま流用)
 8. Bluetoothコントローラ接続(`bluetoothctl` をラップした新規API。スキャン→一覧→接続。
    sudo不要)
-9. センサ接続確認(`shell_scripts/udev_check.sh` を実行し、ログの `[OK]`/`[NG]` 行を
-   パースして色付き一覧表示。NGがあっても先に進める)
+9. Claude Codeコード支援(任意・スキップ可。`setup_claude_workspace.bash`。
+   Claude Code CLIの導入(公式native installer、sudo不要)+ `claude_workspace_template/`
+   からロボット専用のClaude作業フォルダを生成(作業ログ・計画・記憶の運用ルールと
+   Issue/PR/計画委譲スキルの雛形入り)+ GitHub接続用SSH鍵の準備。
+   個人のprivateリポジトリへの接続手順と公開鍵を実行ログに表示する。
+   Claude(Anthropic)の利用登録と課金が必要な旨をステップ説明に明記)
+10. センサ接続確認(`shell_scripts/udev_check.sh` を実行し、ログの `[OK]`/`[NG]` 行を
+    パースして色付き一覧表示。NGがあっても先に進める)
 
 ROSワークスペースについて: ステップ4(ROS導入)は既存の作業跡を検知すると、状況に応じて
 「スキップ」「削除してやり直す」に加え、「ソースはあるのでビルドだけやり直す」
