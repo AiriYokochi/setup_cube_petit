@@ -940,6 +940,9 @@ async function waitForRestart(status) {
     try {
       await api("/api/state");
       status.textContent = "再起動しました。画面を読み込み直します…";
+      // Survives the reload below: init() sees it and shows the
+      // "which steps need a re-run" summary on the new version.
+      sessionStorage.setItem("cps_just_updated", "1");
       location.reload();
       return;
     } catch (e) {
@@ -1308,11 +1311,58 @@ async function openReportPanel() {
   actions.appendChild(closeBtn);
 }
 
+// Shown once, right after a self-update finished and the page reloaded onto
+// the new version: says explicitly which steps need a re-run -- or that none
+// do (Airi's real confusion after the first update: "which step do I press?").
+function renderPostUpdateNotice() {
+  const box = document.getElementById("post-update-notice");
+  if (!box || !state.data) return;
+  box.hidden = false;
+  box.innerHTML = "";
+
+  const title = document.createElement("span");
+  title.className = "notice-title";
+  const stale = state.data.steps.filter((s) => s.needs_rerun);
+  box.appendChild(title);
+  if (!stale.length) {
+    title.textContent =
+      "✅ アップデート完了。再実行が必要なステップはありません。これで完了です。";
+  } else {
+    title.textContent = "✅ アップデート完了。このアップデートで再実行が必要なステップ:";
+    const ul = document.createElement("ul");
+    stale.forEach((s) => {
+      const li = document.createElement("li");
+      const link = document.createElement("a");
+      link.href = "#";
+      link.textContent = s.title_ja;
+      link.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        selectStep(s.id);
+      });
+      li.appendChild(link);
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+
+  const close = mkButton("secondary", "閉じる", () => {
+    box.hidden = true;
+    box.innerHTML = "";
+  });
+  close.classList.add("notice-close");
+  box.appendChild(close);
+}
+
 async function init() {
   await loadState();
   if (state.data.steps.length) {
     const firstNotDone = state.data.steps.find((s) => !["done", "skipped"].includes(s.status));
     selectStep(firstNotDone ? firstNotDone.id : state.data.steps[0].id);
+  }
+
+  if (sessionStorage.getItem("cps_just_updated")) {
+    sessionStorage.removeItem("cps_just_updated");
+    renderPostUpdateNotice();
   }
 
   // Fetch upstream-update status in the background (may take a few seconds

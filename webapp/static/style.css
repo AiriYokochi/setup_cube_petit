@@ -142,6 +142,25 @@ body {
 }
 .update-banner-status { font-size: 0.85rem; }
 
+/* One-shot summary after a self-update: which steps need a re-run (if any). */
+.post-update-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  max-width: 1100px;
+  margin: 0.8rem auto 0;
+  padding: 0.7rem 1rem;
+  border: 1px solid #86efac;
+  background: #f0fdf4;
+  color: #14532d;
+  border-radius: 10px;
+}
+.post-update-notice .notice-title { font-weight: 600; }
+.post-update-notice ul { margin: 0; padding-left: 1.4rem; }
+.post-update-notice a { color: inherit; font-weight: 600; }
+.post-update-notice .notice-close { margin-left: auto; }
+
 .step-badge {
   margin-left: auto;
   flex: 0 0 auto;
@@ -548,6 +567,7 @@ details.manual-fallback > summary { cursor: pointer; font-size: 0.9rem; color: v
   summary { background: #242830; color: var(--text); }
   .update-banner, .step-badge { background: #3a2c17; color: #fdba74; border-color: #7c4a12; }
   .update-banner summary { background: transparent; }
+  .post-update-notice { background: #14261a; color: #86efac; border-color: #166534; }
 }
 
 /* --- bug report ("不具合を報告") ------------------------------------------- */
