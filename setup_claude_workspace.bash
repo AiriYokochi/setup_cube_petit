@@ -14,7 +14,11 @@
 # Env: ROBOT_NAMESPACE (set by the setup webapp; defaults to cube_petit),
 #      CUBE_PETIT_SETUP_HOME (where the JSON summary goes; defaults to
 #      ~/.cube_petit_setup).
-# Idempotent: safe to run again, never overwrites an existing workspace.
+# Idempotent: safe to run again. On an existing workspace it updates ONLY the
+# template-managed files (CLAUDE.md / README.md / docs/dev_guide / .claude/
+# skills) so guideline updates reach every robot; owner data (docs/worklog,
+# docs/owner_profile.md, plans/, memory/, .git, anything not from the
+# template) is never touched.
 set -euo pipefail
 
 ROBOT_NAMESPACE="${ROBOT_NAMESPACE:-cube_petit}"
@@ -32,9 +36,54 @@ else
   curl -fsSL https://claude.ai/install.sh | bash
 fi
 
+# Render a template file (placeholders filled) to stdout.
+render_template() {
+  sed "s/{{ROBOT_NAME}}/${ROBOT_NAMESPACE}/g" "$1"
+}
+
+# Install one template-managed file into the workspace, logging what
+# happened. $3 = "backup" keeps a timestamped copy of a differing existing
+# file (used for files the owner may have edited by hand).
+BACKUP_TS="$(date +%Y%m%d%H%M%S)"
+update_managed_file() {
+  local src="$1" dest="$2" mode="${3:-}"
+  local rel="${dest#"$WS_DIR"/}"
+  local tmp
+  tmp="$(mktemp)"
+  render_template "$src" > "$tmp"
+  if [ -f "$dest" ] && cmp -s "$tmp" "$dest"; then
+    echo "  unchanged: $rel"
+    rm -f "$tmp"
+    return 0
+  fi
+  if [ -f "$dest" ]; then
+    if [ "$mode" = "backup" ]; then
+      cp "$dest" "$dest.bak.$BACKUP_TS"
+      echo "  updated:   $rel (previous version saved as $rel.bak.$BACKUP_TS)"
+    else
+      echo "  updated:   $rel"
+    fi
+  else
+    echo "  added:     $rel"
+  fi
+  mkdir -p "$(dirname "$dest")"
+  mv "$tmp" "$dest"
+}
+
 echo -e '\e[1;32m == 2/3 Claude workspace == \e[m'
 if [ -d "$WS_DIR" ]; then
-  echo "Workspace already exists, leaving it untouched: $WS_DIR"
+  # Existing workspace: refresh ONLY the template-managed files so guideline
+  # updates propagate. Owner data (docs/worklog, docs/owner_profile.md,
+  # plans/, memory/, .git, any file not listed here) is never touched, and
+  # template files removed upstream are never deleted locally.
+  echo "Workspace exists: $WS_DIR"
+  echo "テンプレート由来の共通ファイルだけを最新に更新します(あなたの記録は変更されません)。"
+  update_managed_file "$TEMPLATE_DIR/CLAUDE.md.template" "$WS_DIR/CLAUDE.md" backup
+  update_managed_file "$TEMPLATE_DIR/README.md" "$WS_DIR/README.md" backup
+  (cd "$TEMPLATE_DIR" && { find docs/dev_guide .claude/skills -type f 2>/dev/null || true; }) \
+  | while read -r rel; do
+    update_managed_file "$TEMPLATE_DIR/$rel" "$WS_DIR/$rel"
+  done
 else
   mkdir -p "$WS_DIR"
   cp -r "$TEMPLATE_DIR"/. "$WS_DIR"/

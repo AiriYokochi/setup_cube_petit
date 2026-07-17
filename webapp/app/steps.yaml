@@ -212,11 +212,17 @@ steps:
       ③GitHub接続用のSSH鍵の準備、を行います。
       実行が終わると、残りの手順(GitHubリポジトリの作成と公開鍵の登録)が
       この画面に表示されます。
+      もう一度実行すると、作業フォルダの共通部分(ガイドやルール)が最新に
+      更新されます(あなたの作業ログや記録は変更されません)。
     type: script
     script: setup_claude_workspace.bash
     needs_sudo: false
     skippable: true
     requires_reboot: false
+    # The "update available" badge for this step should also fire when only
+    # the workspace template changed (the script itself may be untouched).
+    watch_paths:
+      - claude_workspace_template
     # Link buttons shown on this step's guide panel (data, not code -- same
     # idea as the "completion" section below: editable without touching JS).
     guide_links:
