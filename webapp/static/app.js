@@ -12,6 +12,7 @@ async function api(path, opts = {}) {
     method: opts.method || "GET",
     headers: { "Content-Type": "application/json" },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
+    signal: opts.signal,
   });
   let payload = null;
   try {
@@ -910,7 +911,17 @@ function renderUpdateBanner() {
     btn.disabled = true;
     status.textContent = "更新中...";
     try {
-      const r = await api("/api/updates/self", { method: "POST" });
+      // Time-box the request: the server may exit for its restart while this
+      // request is in flight, and a fetch left pending forever would strand
+      // the banner on 更新中 with no way out.
+      const abort = new AbortController();
+      const timer = setTimeout(() => abort.abort(), 15000);
+      let r;
+      try {
+        r = await api("/api/updates/self", { method: "POST", signal: abort.signal });
+      } finally {
+        clearTimeout(timer);
+      }
       if (r.ok && r.restarting) {
         btn.remove();
         await waitForRestart(status);
@@ -922,8 +933,19 @@ function renderUpdateBanner() {
         btn.disabled = false;
       }
     } catch (err) {
-      status.textContent = "エラー: " + err.message;
-      btn.disabled = false;
+      // The request failed -- but the server may have applied the update and
+      // exited before answering. Probe once: if it is already down, treat
+      // this as the normal restart path; if it is still up, it never
+      // restarted and this was a real error.
+      const alive = await api("/api/state").then(() => true).catch(() => false);
+      if (!alive) {
+        btn.remove();
+        await waitForRestart(status);
+      } else {
+        status.textContent =
+          "更新できませんでした(通信エラー): " + err.message + " — もう一度お試しください。";
+        btn.disabled = false;
+      }
     }
   });
   banner.appendChild(btn);
@@ -952,6 +974,9 @@ async function waitForRestart(status) {
   }
   status.textContent =
     "自動再起動を確認できませんでした。ターミナルで run.sh を手動で起動し直してください。";
+  // Escape hatch: never leave the user without a clickable way forward.
+  const reloadBtn = mkButton("secondary", "ページを再読み込み", () => location.reload());
+  status.insertAdjacentElement("afterend", reloadBtn);
 }
 
 // The ros_setup step gets its own "update the robot software" action when
