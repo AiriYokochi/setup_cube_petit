@@ -322,6 +322,8 @@ def _extra_env_for(step_id: str, state: dict, inputs: dict) -> dict:
         if api_key:
             env["OPENAI_API_KEY"] = str(api_key)
         return env
+    if step_id == "claude_support":
+        return {"ROBOT_NAMESPACE": state.get("robot_namespace") or ""}
     return {}
 
 
@@ -340,7 +342,9 @@ async def run_step(step_def: dict, inputs: dict, state: dict) -> StepRun:
     if step_type == "prereq_check":
         return await start_command(step_id, _build_prereq_cmd(), cwd=REPO_ROOT)
     if step_type in ("script", "script_with_precheck"):
-        if step_id == "env_setup":
+        if step_id in ("env_setup", "claude_support"):
+            # Both steps exist to thread state into the child's env; show it
+            # in the mock description (see _build_env_setup_cmd).
             cmd = _build_env_setup_cmd(step_def["script"], extra_env)
         else:
             cmd = _build_script_cmd(step_def["script"])

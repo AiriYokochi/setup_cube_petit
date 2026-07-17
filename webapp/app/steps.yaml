@@ -181,8 +181,24 @@ steps:
     skippable: true
     requires_reboot: false
 
+  - id: claude_support
+    title_ja: "9. Claude Codeコード支援(任意)"
+    description_ja: |
+      AIによるコード支援環境(Claude Code)を導入します。
+      Claude(Anthropic)の利用登録と課金が必要です。使わない場合はスキップしてください。
+      実行すると: ①Claude Code本体の導入 ②このロボット専用のClaude作業フォルダ
+      (作業ログ・計画・記憶の置き場と、Issue/PR作成などの定型スキル入り)の作成
+      ③GitHub接続用のSSH鍵の準備、を行います。
+      実行後のログに、GitHubで個人のプライベートリポジトリを作って公開鍵を登録する
+      手順が表示されるので、それに従ってください。
+    type: script
+    script: setup_claude_workspace.bash
+    needs_sudo: false
+    skippable: true
+    requires_reboot: false
+
   - id: device_check
-    title_ja: "9. センサ接続確認"
+    title_ja: "10. センサ接続確認"
     description_ja: |
       IMU・CAN・LiDAR・Wi-Fi・SoundBlaster・RealSense・Bluetoothコントローラが
       正しく認識されているか、まとめて確認します(udev_check.sh を実行します)。
