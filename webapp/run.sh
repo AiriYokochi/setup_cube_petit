@@ -28,6 +28,15 @@ VENV_DIR="$HERE/.venv"
 PORT="${CUBE_PETIT_SETUP_PORT:-8760}"
 HOST="${CUBE_PETIT_SETUP_HOST:-0.0.0.0}"
 
+# If the wizard is already running, say so and stop -- before asking for a
+# sudo password. Otherwise uvicorn dies later with a confusing
+# "address already in use" (happened on a real machine).
+if (exec 3<>"/dev/tcp/127.0.0.1/${PORT}") 2>/dev/null; then
+  exec 3>&- 3<&- 2>/dev/null || true
+  echo "[run.sh] すでに起動しています。ブラウザで http://localhost:${PORT} を開いてください。"
+  exit 0
+fi
+
 KEEPALIVE_PID=""
 cleanup() {
   if [ -n "$KEEPALIVE_PID" ]; then
