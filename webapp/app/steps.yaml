@@ -136,10 +136,16 @@ steps:
       - id: ros_domain_id
         label_ja: "ROS_DOMAIN_ID"
         type: text
+        # The static default is a fallback: /api/state overrides it with a
+        # value derived from the robot name (see _suggested_domain_id in
+        # main.py) so two robots on the same Wi-Fi don't collide on 94 --
+        # that actually happened (orange's face showed up on yellow).
         default: "94"
         required: true
         pattern: "^[0-9]{1,3}$"
-        help_ja: "複数台を同じ場所で動かす場合は個体ごとに変えてください。"
+        help_ja: >-
+          同じ場所で複数台を動かすときは、個体ごとに違う番号にしてください
+          (個体名から自動で提案しています)。
         error_ja: "ROS_DOMAIN_ID は0〜999の半角数字で入力してください。"
       - id: openai_api_key
         label_ja: "OpenAI APIキー(任意)"
