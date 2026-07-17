@@ -122,10 +122,13 @@ async def save_inputs(step_id: str, body: InputsBody):
         if not d:
             continue
         if d.get("required") and not value:
-            raise HTTPException(400, f"{key} is required")
+            raise HTTPException(400, f"「{d.get('label_ja', key)}」を入力してください")
         if d.get("type") == "text" and d.get("pattern") and value:
             if not re.match(d["pattern"], str(value)):
-                raise HTTPException(400, f"invalid value for {key}: must match {d['pattern']}")
+                raise HTTPException(
+                    400,
+                    d.get("error_ja") or f"「{d.get('label_ja', key)}」の形式が正しくありません",
+                )
 
     state = state_mod.load_state()
     state["inputs"].setdefault(step_id, {}).update(body.inputs)
