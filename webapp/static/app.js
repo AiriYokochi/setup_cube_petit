@@ -136,7 +136,11 @@ function appendLog(pre, line) {
   pre.scrollTop = pre.scrollHeight;
 }
 
-function attachStream(runKey, stepId) {
+function attachStream(runKey, stepId, opts = {}) {
+  // reloadOnEnd must be false when replaying the log of an already-finished
+  // step: reloading re-renders the detail pane, which replays the log again,
+  // which fires "end" again -> infinite request loop.
+  const reloadOnEnd = opts.reloadOnEnd ?? false;
   closeStream();
   const pre = document.querySelector("#step-detail .log-output");
   if (!pre) return;
@@ -147,12 +151,24 @@ function attachStream(runKey, stepId) {
   es.addEventListener("end", async () => {
     es.close();
     if (state.eventSource === es) state.eventSource = null;
+    if (!reloadOnEnd) return;
     await loadState();
+    advanceIfDone(stepId);
   });
   es.onerror = () => {
     // EventSource retries by default; harmless since /stream replays from
     // the on-disk log each time it (re)connects.
   };
+}
+
+function advanceIfDone(stepId) {
+  // After a run finishes successfully, move the user to the next step.
+  const idx = state.data.steps.findIndex((s) => s.id === stepId);
+  if (idx === -1) return;
+  if (state.data.steps[idx].status !== "done") return;
+  if (state.selectedId !== stepId) return;
+  const next = state.data.steps[idx + 1];
+  if (next) selectStep(next.id);
 }
 
 function renderPrecheck(stepId, precheck, container) {
@@ -184,7 +200,7 @@ function renderPrecheck(stepId, precheck, container) {
         if (res.status === "cleaning") {
           // Attach before the DOM gets rebuilt by loadState(); the "end"
           // handler inside attachStream() refreshes state once cleanup is done.
-          attachStream(res.run_key, stepId);
+          attachStream(res.run_key, stepId, { reloadOnEnd: true });
         } else {
           await loadState();
         }
@@ -324,8 +340,10 @@ function renderDetail(id) {
   }
 
   if (running || step.status === "done" || step.status === "failed") {
-    attachStream(id, id);
-    logPanel.open = step.status === "failed";
+    // Finished steps only replay their log; reloading state on "end" there
+    // would loop (see attachStream).
+    attachStream(id, id, { reloadOnEnd: running });
+    logPanel.open = running || step.status === "failed";
   }
 }
 
