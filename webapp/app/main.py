@@ -24,8 +24,12 @@ WEBAPP_DIR = APP_DIR.parent
 STATIC_DIR = WEBAPP_DIR / "static"
 
 with open(APP_DIR / "steps.yaml", encoding="utf-8") as f:
-    STEPS: list[dict] = yaml.safe_load(f)["steps"]
+    _STEPS_YAML: dict = yaml.safe_load(f)
+STEPS: list[dict] = _STEPS_YAML["steps"]
 STEPS_BY_ID: dict[str, dict] = {s["id"]: s for s in STEPS}
+# Celebration-screen data (title/labels/links), see steps.yaml's "completion"
+# section -- kept as data so it can be edited without touching this file.
+COMPLETION: dict = _STEPS_YAML.get("completion", {})
 
 app = FastAPI(title="cube_petit_setup webapp")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -147,12 +151,15 @@ async def get_state():
                 "exit_code": st.get("exit_code"),
             }
         )
+    all_done = bool(steps_out) and all(s["status"] in ("done", "skipped") for s in steps_out)
     return {
         "robot_namespace": state.get("robot_namespace"),
         "awaiting_reboot": state.get("awaiting_reboot", False),
         "inputs": state.get("inputs", {}),
         "steps": steps_out,
         "mock": engine.MOCK,
+        "all_done": all_done,
+        "completion": COMPLETION,
     }
 
 

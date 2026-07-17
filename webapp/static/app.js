@@ -419,6 +419,44 @@ function renderCheckStep(id, step, el, actions, running) {
   loadCheckResult(id, resultBox, statusEl);
 }
 
+// --- completion celebration screen ------------------------------------------
+
+function buildCelebrationPanel() {
+  const completion = (state.data && state.data.completion) || {};
+  const box = document.createElement("div");
+  box.className = "celebration-box";
+
+  const img = document.createElement("img");
+  img.className = "celebration-petit";
+  img.src = "/static/petit.png";
+  img.alt = "";
+  box.appendChild(img);
+
+  const title = document.createElement("h2");
+  title.className = "celebration-title";
+  title.textContent = completion.title_ja || "🎉 セットアップ完了です!";
+  box.appendChild(title);
+
+  if (completion.subtitle_ja) {
+    const subtitle = document.createElement("p");
+    subtitle.className = "celebration-subtitle";
+    subtitle.textContent = completion.subtitle_ja;
+    box.appendChild(subtitle);
+  }
+
+  const actionsWrap = document.createElement("div");
+  actionsWrap.className = "celebration-actions";
+  (completion.next_actions || []).forEach((action) => {
+    const btn = mkButton("primary", action.label_ja, () => {
+      if (action.url) window.open(action.url, "_blank", "noopener");
+    });
+    actionsWrap.appendChild(btn);
+  });
+  box.appendChild(actionsWrap);
+
+  return box;
+}
+
 function renderDetail(id) {
   const step = findStep(id);
   const el = document.getElementById("step-detail");
@@ -553,6 +591,14 @@ function renderDetail(id) {
     // would loop (see attachStream).
     attachStream(id, id, { reloadOnEnd: running });
     logPanel.open = running || step.status === "failed";
+  }
+
+  // Celebrate once every step is done/skipped, shown below the last step's
+  // own detail (its log/results stay visible above, e.g. the sensor check
+  // list) so nothing about the final step's own status is hidden.
+  const isLastStep = state.data.steps.length > 0 && state.data.steps[state.data.steps.length - 1].id === id;
+  if (isLastStep && state.data.all_done) {
+    el.appendChild(buildCelebrationPanel());
   }
 }
 

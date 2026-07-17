@@ -193,3 +193,25 @@ steps:
     needs_sudo: false
     skippable: false
     requires_reboot: false
+
+# Shown once every step above is done/skipped, as a celebration screen with
+# "what do you want to do next" buttons. This is data (not code) on purpose,
+# so the labels/links can be edited later without touching app.js/main.py.
+completion:
+  title_ja: "🎉 セットアップ完了です!"
+  subtitle_ja: "よきキューブプチライフを!"
+  next_actions:
+    - id: try_it
+      label_ja: "とりあえず動かしてみたい"
+      # TODO: リンク先はありさんが確定する
+      url: "https://sbgisen.github.io/cube_petit_portal/"
+    - id: learn_ros
+      label_ja: "ROSの勉強をしたい"
+      url: "https://docs.ros.org/en/jazzy/Tutorials.html"
+    - id: learn_internals
+      label_ja: "キューブプチの中身を知りたい"
+      url: "https://github.com/sbgisen/cube_petit_ros"
+    - id: consult
+      label_ja: "何がしたいか相談したい"
+      # TODO: リンク先はありさんが確定する
+      url: "https://sbgisen.github.io/cube_petit_portal/"
