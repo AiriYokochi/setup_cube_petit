@@ -119,9 +119,14 @@ async def start_command(
     log_path = state_mod.log_path_for(step_id)
     log_path.write_text("", encoding="utf-8")  # fresh log for this run
 
+    # stdin is a PIPE when we have scripted answers, DEVNULL otherwise: never
+    # let a child inherit the server's terminal, where an unexpected prompt
+    # (e.g. add-apt-repository without -y) would block forever waiting for a
+    # keypress nobody can see. With DEVNULL such a prompt hits EOF and the
+    # step fails visibly instead of hanging.
     proc = await asyncio.create_subprocess_shell(
         cmd,
-        stdin=asyncio.subprocess.PIPE if stdin_text is not None else None,
+        stdin=asyncio.subprocess.PIPE if stdin_text is not None else asyncio.subprocess.DEVNULL,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
         cwd=str(cwd) if cwd else None,
