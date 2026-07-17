@@ -6,10 +6,14 @@
 #      (CLAUDE.md conventions + issue/PR/planning skills)
 #   3. make sure an SSH key exists for connecting the workspace to the
 #      owner's personal *private* GitHub repository
-# Finishes by printing the public key and the remaining manual steps
-# (create the private repo, register the key, `claude` first login).
+# Finishes by writing a small JSON summary for the setup webapp, which then
+# renders the remaining manual steps (create the private repo, register the
+# key, `claude` first login) as a panel with copy buttons. The public key is
+# deliberately NOT printed to the log.
 #
-# Env: ROBOT_NAMESPACE (set by the setup webapp; defaults to cube_petit).
+# Env: ROBOT_NAMESPACE (set by the setup webapp; defaults to cube_petit),
+#      CUBE_PETIT_SETUP_HOME (where the JSON summary goes; defaults to
+#      ~/.cube_petit_setup).
 # Idempotent: safe to run again, never overwrites an existing workspace.
 set -euo pipefail
 
@@ -52,34 +56,34 @@ else
   ssh-keygen -t ed25519 -N "" -C "$ROBOT_NAMESPACE" -f "$KEY_FILE"
 fi
 
-cat <<GUIDE
+# Hand the follow-up info to the setup webapp as JSON. The webapp renders
+# the remaining manual steps (repo creation, key registration, first login)
+# as an on-screen panel with copy buttons; keeping the public key out of the
+# log also keeps it out of the streamed/persisted step logs.
+SETUP_HOME="${CUBE_PETIT_SETUP_HOME:-$HOME/.cube_petit_setup}"
+mkdir -p "$SETUP_HOME"
+WS_DIR="$WS_DIR" KEY_FILE="$KEY_FILE" ROBOT_NAMESPACE="$ROBOT_NAMESPACE" \
+python3 - "$SETUP_HOME/claude_support.json" <<'PY'
+import json
+import os
+import sys
 
-==========================================================================
- Claude Code コード支援の準備ができました。あと3つだけ手作業があります:
+ns = os.environ["ROBOT_NAMESPACE"]
+with open(sys.argv[1], "w", encoding="utf-8") as f:
+    json.dump(
+        {
+            "workspace_dir": os.environ["WS_DIR"],
+            "pubkey_path": os.environ["KEY_FILE"] + ".pub",
+            "repo_suggestion": f"{ns}_claude",
+            "robot_name": ns,
+        },
+        f,
+        ensure_ascii=False,
+        indent=2,
+    )
+PY
 
- 1. GitHubで「個人のprivateリポジトリ」を作成してください
-      リポジトリ名の例: ${ROBOT_NAMESPACE}_claude
-      (作業ログや記憶に内部情報が入るので、必ず private にしてください)
-
- 2. この公開鍵を GitHub の Settings → SSH and GPG keys に登録してください:
-
-$(cat "${KEY_FILE}.pub")
-
- 3. 登録できたら、ターミナルで以下を実行してつなぎます:
-
-      cd ${WS_DIR}
-      git remote add origin git@github.com:<あなたのアカウント>/${ROBOT_NAMESPACE}_claude.git
-      git add -A && git commit -m "initial workspace"
-      git push -u origin main
-
- 使い始めるには、ターミナルで:
-
-      cd ${WS_DIR}
-      claude
-
- 初回はブラウザが開いてClaude(Anthropic)へのログインを求められます。
- Claude Pro/Max などのプラン、またはAPIの課金設定が必要です。
-==========================================================================
-GUIDE
-
+echo ""
+echo "Claude Code コード支援の準備ができました。"
+echo "残りの手順(GitHubリポジトリ作成・公開鍵の登録)は、この画面に表示されます。"
 echo "Setup Claude workspace finished."

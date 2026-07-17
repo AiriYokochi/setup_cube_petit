@@ -209,6 +209,322 @@ def _build_env_setup_cmd(script_name: str, extra_env: dict) -> str:
     return _mock_command(f"{script_name} (env: {shown})", 2)
 
 
+def _build_claude_support_cmd(script_name: str, extra_env: dict) -> str:
+    """Like _build_env_setup_cmd, but the mock variant also produces the side
+    effects the post-run guide panel needs (claude_support.json + a fake
+    public key file under MOCK_HOME), so the panel can be exercised end to
+    end in --mock without reading the real ~/.ssh."""
+    if not MOCK:
+        return _build_env_setup_cmd(script_name, extra_env)
+    # robot_namespace is validated as ^cube_petit_[a-z0-9_]+$ upstream, so it
+    # is safe to embed in the generated snippet.
+    ns = extra_env.get("ROBOT_NAMESPACE") or "cube_petit"
+    seed = (
+        "import json, pathlib\n"
+        f"home = pathlib.Path({str(MOCK_HOME)!r})\n"
+        "ssh = home / '.ssh'\n"
+        "ssh.mkdir(parents=True, exist_ok=True)\n"
+        "pub = ssh / 'id_ed25519.pub'\n"
+        f"pub.write_text('ssh-ed25519 AAAAC3mockmockmockmockmock {ns}\\n')\n"
+        f"ws = home / 'work' / '{ns}_claude'\n"
+        "info = {'workspace_dir': str(ws), 'pubkey_path': str(pub),\n"
+        f"        'repo_suggestion': '{ns}_claude', 'robot_name': '{ns}'}}\n"
+        f"path = pathlib.Path({str(state_mod.STATE_DIR)!r}) / 'claude_support.json'\n"
+        "path.write_text(json.dumps(info, ensure_ascii=False, indent=2))\n"
+    )
+    return (
+        _build_env_setup_cmd(script_name, extra_env)
+        + f"\npython3 -c {shlex.quote(seed)}"
+        + "\necho '[mock] wrote claude_support.json'"
+    )
+
+
+async def connect_repo(ws_dir: str, repo_url: str) -> dict:
+    """Wire the claude_support workspace to the owner's GitHub repository:
+    remote add/set-url + (first-commit if needed) + push -u. Returns
+    {ok, output}; URL validation happens in the API layer. In mock mode
+    nothing real runs."""
+    if MOCK:
+        return {
+            "ok": True,
+            "output": (
+                f"[mock] would run in {ws_dir}:\n"
+                f"[mock]   git remote add origin {repo_url}\n"
+                "[mock]   git add -A && git commit -m 'initial workspace'\n"
+                "[mock]   git fetch origin && git merge origin/main -X ours (README/LICENSE取り込み)\n"
+                "[mock]   git push -u origin main\n"
+                "[mock] push succeeded."
+            ),
+        }
+
+    env = _git_ssh_env()
+    outputs: list[str] = []
+    # Fallback identity: a freshly set up machine has no git user config yet,
+    # and both the first commit and the merge below need a committer.
+    git_id = ("-c", "user.name=Cube Petit Setup", "-c", "user.email=cube-petit-setup@localhost")
+
+    async def run(*args: str, log: bool = True) -> tuple[int, str]:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            cwd=ws_dir,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            env=env,
+        )
+        try:
+            out, _ = await asyncio.wait_for(proc.communicate(), timeout=90)
+        except asyncio.TimeoutError:
+            proc.kill()
+            if log:
+                outputs.append(f"$ {' '.join(args)}\n(timed out)")
+            return 124, ""
+        text = out.decode(errors="replace").strip()
+        if log:
+            outputs.append(f"$ {' '.join(args)}" + (f"\n{text}" if text else ""))
+        return proc.returncode or 0, text
+
+    def fail() -> dict:
+        return {"ok": False, "output": "\n".join(outputs)}
+
+    # remote add, or update it when re-running with a corrected URL
+    code, _ = await run("git", "remote", "get-url", "origin", log=False)
+    if code == 0:
+        code, _ = await run("git", "remote", "set-url", "origin", repo_url)
+    else:
+        code, _ = await run("git", "remote", "add", "origin", repo_url)
+    if code != 0:
+        return fail()
+
+    # The workspace is git-init'ed but has no commit yet on the first run.
+    code, _ = await run("git", "rev-parse", "--verify", "HEAD", log=False)
+    if code != 0:
+        if (await run("git", "add", "-A"))[0] != 0:
+            return fail()
+        if (await run("git", *git_id, "commit", "-m", "initial workspace"))[0] != 0:
+            return fail()
+
+    # A repository created with "Add a README file" / a license (the flow the
+    # guide recommends) already has commits on GitHub's default branch, so a
+    # plain push would be rejected as non-fast-forward. Fetch, detect the
+    # remote default branch, and merge those initial files in first.
+    if (await run("git", "fetch", "origin"))[0] != 0:
+        return fail()
+    code, sym = await run("git", "ls-remote", "--symref", "origin", "HEAD", log=False)
+    default = None
+    if code == 0:
+        for line in sym.splitlines():
+            if line.startswith("ref:") and "refs/heads/" in line:
+                default = line.split()[1].split("refs/heads/", 1)[1]
+                break
+    _, branch = await run("git", "rev-parse", "--abbrev-ref", "HEAD", log=False)
+    branch = branch or "main"
+    target = default or branch
+
+    code, _ = await run("git", "rev-parse", "--verify", f"origin/{target}", log=False)
+    if code == 0:
+        # -X ours: on add/add conflicts (README.md exists in both the
+        # workspace template and the GitHub-generated repo) keep the local
+        # template version; remote-only files (e.g. LICENSE) come in as-is.
+        if (await run(
+            "git", *git_id, "merge", f"origin/{target}",
+            "--allow-unrelated-histories", "-X", "ours",
+            "-m", "Merge initial repository files from GitHub",
+        ))[0] != 0:
+            return fail()
+
+    # Align the local branch name with the remote default (master vs main).
+    if branch != target:
+        if (await run("git", "branch", "-m", target))[0] != 0:
+            return fail()
+
+    if (await run("git", "push", "-u", "origin", target))[0] != 0:
+        return fail()
+    return {"ok": True, "output": "\n".join(outputs)}
+
+
+def _git_ssh_env() -> dict:
+    """Child env for network git/ssh calls: never block on an interactive
+    prompt (host key confirmation, password) -- fail visibly instead."""
+    env = _child_env()
+    env["GIT_SSH_COMMAND"] = "ssh -o StrictHostKeyChecking=accept-new -o BatchMode=yes"
+    return env
+
+
+_SSH_AUTH_OK_RE = re.compile(r"Hi ([A-Za-z0-9-]+)! You've successfully authenticated")
+
+# Unified wording for any SSH-authentication failure (precheck item 2 and
+# connect_repo/push): the frontend also shows recovery actions next to it.
+SSH_ISSUE_MESSAGE = (
+    "SSH鍵の問題です。手順2の「公開鍵の登録」がきちんとできているか、もう一度確認してください。"
+)
+
+
+async def _run_once(args: list[str], timeout: int) -> tuple[int, str]:
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        env=_git_ssh_env(),
+    )
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        return 124, "(timed out)"
+    return proc.returncode or 0, out.decode(errors="replace").strip()
+
+
+async def open_claude_terminal(ws_dir: str) -> dict:
+    """Open a terminal ON THE ROBOT'S OWN SCREEN, running `claude` in the
+    workspace (first-login is interactive, so it cannot run inside the web
+    app). Falls back from gnome-terminal to x-terminal-emulator."""
+    if MOCK:
+        return {"ok": True, "message": "[mock] この機体の画面にターミナルを開きました(疑似)。"}
+
+    import shutil
+
+    env = _child_env()
+    manual_hint = "手動でターミナルを開いて、コピーしたコマンドを実行してください。"
+    if not env.get("DISPLAY") and not env.get("WAYLAND_DISPLAY"):
+        return {"ok": False, "message": f"この機体の画面が見つかりません。{manual_hint}"}
+
+    if shutil.which("gnome-terminal"):
+        args = ["gnome-terminal", f"--working-directory={ws_dir}",
+                "--", "bash", "-lc", "claude; exec bash"]
+    elif shutil.which("x-terminal-emulator"):
+        args = ["x-terminal-emulator", "-e",
+                f"bash -lc 'cd {shlex.quote(ws_dir)} && claude; exec bash'"]
+    else:
+        return {"ok": False, "message": f"ターミナルアプリが見つかりません。{manual_hint}"}
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            cwd=ws_dir,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            env=env,
+            start_new_session=True,  # survive a webapp server restart
+        )
+    except OSError as e:
+        return {"ok": False, "message": f"ターミナルを起動できませんでした({e})。{manual_hint}"}
+    # gnome-terminal re-spawns via its server process and exits quickly on
+    # success; only an immediate non-zero exit is a real failure.
+    await asyncio.sleep(0.5)
+    if proc.returncode not in (None, 0):
+        return {"ok": False, "message": f"ターミナルを起動できませんでした。{manual_hint}"}
+    return {"ok": True, "message": "この機体の画面にターミナルを開きました。"}
+
+
+def _github_account_exists(account: str) -> tuple[Optional[bool], str]:
+    """(exists, message). exists=None means the check itself failed."""
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(
+        f"https://api.github.com/users/{account}",
+        headers={"User-Agent": "cube-petit-setup"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5):
+            return True, f"アカウント {account} が見つかりました。"
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False, f"アカウント {account} が見つかりません(入力ミスはありませんか?)。"
+        return None, f"アカウントの確認ができませんでした(HTTP {e.code})。そのまま接続を試しても構いません。"
+    except Exception:
+        return None, "アカウントの確認ができませんでした(ネットワークエラー)。接続を確認してください。"
+
+
+async def precheck_repo(account: str, repo: str) -> list[dict]:
+    """Pre-connect connectivity check, one result item per stage:
+    GitHub account exists / this machine's SSH key authenticates /
+    the target repository exists. Items: {id, ok, warn, message, ssh_issue}.
+    ok=None renders as a warning (check inconclusive)."""
+    if MOCK:
+        bad = "ng" in account
+        return [
+            {"id": "account", "ok": not bad, "warn": False, "ssh_issue": False,
+             "message": (f"アカウント {account} が見つかりません(入力ミスはありませんか?)。" if bad
+                         else f"アカウント {account} が見つかりました。")},
+            {"id": "ssh", "ok": not bad, "warn": False, "ssh_issue": bad,
+             "message": (SSH_ISSUE_MESSAGE if bad
+                         else f"この機体の鍵は {account} として認証されています。")},
+            {"id": "repo", "ok": not bad, "warn": False, "ssh_issue": False,
+             "message": (f"リポジトリが見つかりません。手順1で作成しましたか?(名前: {repo})" if bad
+                         else f"リポジトリ {account}/{repo} が見つかりました。")},
+        ]
+
+    items: list[dict] = []
+
+    # 1. account exists (unauthenticated GitHub API)
+    exists, message = await asyncio.to_thread(_github_account_exists, account)
+    items.append({
+        "id": "account",
+        "ok": exists is not False,
+        "warn": exists is None,
+        "ssh_issue": False,
+        "message": message,
+    })
+
+    # 2. SSH key authenticates against github.com. ssh -T exits 1 even on
+    # success (GitHub offers no shell), so parse the greeting instead.
+    code, text = await _run_once(
+        ["ssh", "-T", "git@github.com",
+         "-o", "StrictHostKeyChecking=accept-new",
+         "-o", "BatchMode=yes",
+         "-o", "ConnectTimeout=5"],
+        timeout=15,
+    )
+    m = _SSH_AUTH_OK_RE.search(text)
+    if m:
+        auth_user = m.group(1)
+        if auth_user.lower() != account.lower():
+            items.append({
+                "id": "ssh", "ok": True, "warn": True, "ssh_issue": False,
+                "message": (
+                    f"この機体の鍵は {auth_user} として認証されています。"
+                    f"リポジトリは {auth_user} 側に作るか、アカウント名を合わせてください。"
+                ),
+            })
+        else:
+            items.append({
+                "id": "ssh", "ok": True, "warn": False, "ssh_issue": False,
+                "message": f"この機体の鍵は {auth_user} として認証されています。",
+            })
+    elif re.search(r"permission denied", text, re.I):
+        items.append({"id": "ssh", "ok": False, "warn": False, "ssh_issue": True,
+                      "message": SSH_ISSUE_MESSAGE})
+    else:
+        items.append({
+            "id": "ssh", "ok": False, "warn": False, "ssh_issue": False,
+            "message": f"GitHubへのSSH接続に失敗しました。ネットワーク接続を確認してください。({text[:120]})",
+        })
+
+    # 3. the target repository exists (over the same SSH transport)
+    code, text = await _run_once(
+        ["git", "ls-remote", f"git@github.com:{account}/{repo}.git", "HEAD"],
+        timeout=20,
+    )
+    if code == 0:
+        items.append({"id": "repo", "ok": True, "warn": False, "ssh_issue": False,
+                      "message": f"リポジトリ {account}/{repo} が見つかりました。"})
+    elif re.search(r"repository not found", text, re.I):
+        items.append({"id": "repo", "ok": False, "warn": False, "ssh_issue": False,
+                      "message": f"リポジトリが見つかりません。手順1で作成しましたか?(名前: {repo})"})
+    elif re.search(r"permission denied", text, re.I):
+        items.append({"id": "repo", "ok": False, "warn": False, "ssh_issue": True,
+                      "message": SSH_ISSUE_MESSAGE})
+    else:
+        items.append({"id": "repo", "ok": False, "warn": False, "ssh_issue": False,
+                      "message": f"リポジトリの確認に失敗しました。({text[:120]})"})
+
+    return items
+
+
 def _mock_check_cmd() -> str:
     """A fake udev_check.sh-like log: same "[OK]"/"[NG]" line shape as the
     real script (see shell_scripts/udev_check.sh), colored the same way,
@@ -342,9 +658,13 @@ async def run_step(step_def: dict, inputs: dict, state: dict) -> StepRun:
     if step_type == "prereq_check":
         return await start_command(step_id, _build_prereq_cmd(), cwd=REPO_ROOT)
     if step_type in ("script", "script_with_precheck"):
-        if step_id in ("env_setup", "claude_support"):
-            # Both steps exist to thread state into the child's env; show it
-            # in the mock description (see _build_env_setup_cmd).
+        if step_id == "claude_support":
+            # Threads state into the child's env AND (in mock) seeds the
+            # artifacts the post-run guide panel reads.
+            cmd = _build_claude_support_cmd(step_def["script"], extra_env)
+        elif step_id == "env_setup":
+            # Exists to thread state into the child's env; show it in the
+            # mock description (see _build_env_setup_cmd).
             cmd = _build_env_setup_cmd(step_def["script"], extra_env)
         else:
             cmd = _build_script_cmd(step_def["script"])

@@ -7,6 +7,7 @@ reboot gate). See webapp/README.md for how to run it.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from pathlib import Path
 from typing import Optional
@@ -312,13 +313,172 @@ async def bluetooth_connect(body: BluetoothConnectBody):
     return await engine.bluetooth_connect(body.mac)
 
 
-# --- sensor connection check (step 8) ---------------------------------------
+# --- per-step results (sensor check list / claude_support guide) ------------
+
+def _load_claude_support_info() -> Optional[dict]:
+    info_path = state_mod.STATE_DIR / "claude_support.json"
+    try:
+        return json.loads(info_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _read_claude_support_pubkey(info: dict) -> Optional[str]:
+    if not info.get("pubkey_path"):
+        return None
+    try:
+        return Path(info["pubkey_path"]).read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+
+def _mask_pubkey(pubkey: str) -> str:
+    """UI-side courtesy masking: show just enough of the key to recognize
+    it, not the whole blob (the copy button fetches the full key). Public
+    keys are not secrets; this only avoids parading the full string."""
+    parts = pubkey.split()
+    body = parts[1] if len(parts) >= 2 else parts[0]
+    head = parts[0] if len(parts) >= 2 else "ssh-key"
+    if len(body) <= 16:
+        masked_body = body[:4] + "****"
+    else:
+        masked_body = f"{body[:8]}****…****{body[-6:]}"
+    return f"{head} {masked_body}"
+
+
+def _claude_support_result() -> dict:
+    """Post-run guide data for the claude_support step: the JSON summary
+    written by setup_claude_workspace.bash plus the public key file it
+    points at. The key never enters the streamed/persisted step logs, and
+    only a masked form is included here -- the full key is served by the
+    /pubkey endpoint when the copy button asks for it."""
+    info = _load_claude_support_info()
+    if info is None:
+        return {"available": False}
+    pubkey = _read_claude_support_pubkey(info)
+    ws = info.get("workspace_dir", "")
+    repo = info.get("repo_suggestion", "cube_petit_claude")
+    return {
+        "available": True,
+        "robot_name": info.get("robot_name"),
+        "workspace_dir": ws,
+        "repo_suggestion": repo,
+        "pubkey_masked": _mask_pubkey(pubkey) if pubkey else None,
+        "pubkey_path": info.get("pubkey_path"),
+        # Guide link buttons come from steps.yaml (guide_links), which the
+        # frontend already has via /api/state -- not duplicated here.
+        # Manual fallback for the "connect repository" button:
+        "connect_commands": [
+            {
+                "label_ja": "ワークスペースをリポジトリにつなぐ(<あなたのアカウント> は自分のGitHubアカウント名に置き換えてください)",
+                "command": f"cd {ws} && git remote add origin git@github.com:<あなたのアカウント>/{repo}.git",
+            },
+            {
+                "label_ja": "最初の内容をpushする",
+                "command": f'cd {ws} && git add -A && git commit -m "initial workspace" && git push -u origin main',
+            },
+        ],
+        "login_command": {
+            "label_ja": "Claude Codeを起動して初回ログイン(ここでプラン/課金の設定をします)",
+            "command": f"cd {ws} && claude",
+        },
+    }
+
+
+@app.get("/api/steps/claude_support/pubkey")
+async def get_claude_support_pubkey():
+    """Full public key, fetched only when the user presses the copy button
+    (the guide panel itself shows a masked form)."""
+    info = _load_claude_support_info()
+    pubkey = _read_claude_support_pubkey(info) if info else None
+    if not pubkey:
+        raise HTTPException(404, "public key is not available")
+    return {"pubkey": pubkey}
+
+
+# GitHub account (user or org) name: alphanumeric and hyphens, no leading/
+# trailing/consecutive hyphens, at most 39 chars. The repository name is NOT
+# user input -- it is fixed to <robot_namespace>_claude (repo_suggestion).
+_GH_ACCOUNT_RE = re.compile(r"^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$")
+
+# (pattern, hint, is_ssh_issue) -- SSH auth failures share one wording
+# (engine.SSH_ISSUE_MESSAGE) and get recovery actions in the frontend.
+_CONNECT_HINTS: list[tuple[re.Pattern, str, bool]] = [
+    (re.compile(r"permission denied", re.I), engine.SSH_ISSUE_MESSAGE, True),
+    (re.compile(r"repository not found", re.I),
+     "リポジトリ(手順1)は作成済みですか?アカウント名とリポジトリ名が合っているか確認してください。"
+     "(README・License付きで作成した場合もそのまま取り込めます)", False),
+    (re.compile(r"could not resolve hostname|network is unreachable", re.I),
+     "ネットワーク接続を確認してください。", False),
+]
+
+
+class ConnectRepoBody(BaseModel):
+    account: str
+
+
+@app.post("/api/steps/claude_support/connect_repo")
+async def claude_support_connect_repo(body: ConnectRepoBody):
+    account = body.account.strip()
+    if not account or len(account) > 39 or not _GH_ACCOUNT_RE.match(account):
+        raise HTTPException(
+            400,
+            "GitHubアカウント名の形式が正しくありません。"
+            "英数字とハイフン(先頭・末尾以外)だけで、39文字以内で入力してください。",
+        )
+    info = _load_claude_support_info()
+    if info is None or not info.get("workspace_dir"):
+        raise HTTPException(409, "先にこのステップを実行してワークスペースを作成してください。")
+    repo = info.get("repo_suggestion", "cube_petit_claude")
+    repo_url = f"git@github.com:{account}/{repo}.git"
+    result = await engine.connect_repo(info["workspace_dir"], repo_url)
+    result["repo_url"] = repo_url
+    result["ssh_issue"] = False
+    if not result["ok"]:
+        for pattern, hint, is_ssh in _CONNECT_HINTS:
+            if pattern.search(result["output"]):
+                result["hint"] = hint
+                result["ssh_issue"] = is_ssh
+                break
+    return result
+
+
+@app.post("/api/steps/claude_support/open_terminal")
+async def claude_support_open_terminal():
+    """Open a terminal running `claude` on the robot's own display (the
+    first login is interactive and cannot happen inside the web app)."""
+    info = _load_claude_support_info()
+    if info is None or not info.get("workspace_dir"):
+        raise HTTPException(409, "先にこのステップを実行してワークスペースを作成してください。")
+    return await engine.open_claude_terminal(info["workspace_dir"])
+
+
+@app.post("/api/steps/claude_support/precheck_repo")
+async def claude_support_precheck_repo(body: ConnectRepoBody):
+    """Pre-connect check: account exists / SSH key authenticates / repo
+    exists -- so the user can fix steps 1-2 before pressing connect."""
+    account = body.account.strip()
+    if not account or len(account) > 39 or not _GH_ACCOUNT_RE.match(account):
+        raise HTTPException(
+            400,
+            "GitHubアカウント名の形式が正しくありません。"
+            "英数字とハイフン(先頭・末尾以外)だけで、39文字以内で入力してください。",
+        )
+    info = _load_claude_support_info()
+    if info is None:
+        raise HTTPException(409, "先にこのステップを実行してワークスペースを作成してください。")
+    repo = info.get("repo_suggestion", "cube_petit_claude")
+    items = await engine.precheck_repo(account, repo)
+    return {"items": items, "all_ok": all(i["ok"] for i in items)}
+
 
 @app.get("/api/steps/{step_id}/result")
-async def get_check_result(step_id: str):
+async def get_step_result(step_id: str):
     step_def = _get_step_or_404(step_id)
+    if step_def["id"] == "claude_support":
+        return _claude_support_result()
     if step_def["type"] != "check":
-        raise HTTPException(400, "this step has no check result")
+        raise HTTPException(400, "this step has no result")
     log_path = state_mod.log_path_for(step_id)
     if not log_path.exists():
         return {"items": [], "ok_count": 0, "total": 0}

@@ -191,13 +191,28 @@ steps:
       実行すると: ①Claude Code本体の導入 ②このロボット専用のClaude作業フォルダ
       (作業ログ・計画・記憶の置き場と、Issue/PR作成などの定型スキル入り)の作成
       ③GitHub接続用のSSH鍵の準備、を行います。
-      実行後のログに、GitHubで個人のプライベートリポジトリを作って公開鍵を登録する
-      手順が表示されるので、それに従ってください。
+      実行が終わると、残りの手順(GitHubリポジトリの作成と公開鍵の登録)が
+      この画面に表示されます。
     type: script
     script: setup_claude_workspace.bash
     needs_sudo: false
     skippable: true
     requires_reboot: false
+    # Link buttons shown on this step's guide panel (data, not code -- same
+    # idea as the "completion" section below: editable without touching JS).
+    guide_links:
+      about_claude:
+        label_ja: "Claude Codeってなに?"
+        url: "https://code.claude.com/docs/ja/overview"
+      github_signup:
+        label_ja: "GitHubアカウントを作る(持っていない場合)"
+        url: "https://github.com/signup"
+      new_repo:
+        label_ja: "リポジトリを作るページを開く"
+        url: "https://github.com/new"
+      ssh_keys:
+        label_ja: "公開鍵を登録するページを開く"
+        url: "https://github.com/settings/ssh/new"
 
   - id: device_check
     title_ja: "10. センサ接続確認"

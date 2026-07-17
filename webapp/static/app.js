@@ -179,7 +179,12 @@ function attachStream(runKey, stepId, opts = {}) {
   };
 }
 
+// Steps that show their own post-run guide panel instead of jumping ahead;
+// the user leaves them via that panel's explicit "next" button.
+const NO_AUTO_ADVANCE = new Set(["claude_support"]);
+
 function advanceIfDone(stepId) {
+  if (NO_AUTO_ADVANCE.has(stepId)) return;
   // After a run finishes successfully, move the user to the next step.
   const idx = state.data.steps.findIndex((s) => s.id === stepId);
   if (idx === -1) return;
@@ -353,6 +358,379 @@ function renderBluetoothStep(id, step, el, actions) {
   api("/api/bluetooth/devices")
     .then((res) => renderBtDeviceList(deviceBox, res.devices, id))
     .catch(() => {});
+}
+
+// --- claude code support (step 9) post-run guide panel ----------------------
+
+async function copyText(text, btn) {
+  let ok = false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    }
+  } catch (e) {
+    // fall through to the legacy path
+  }
+  if (!ok) {
+    // Fallback for non-secure contexts (e.g. http://<LAN IP>:8760 from a
+    // tablet), where navigator.clipboard is unavailable.
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      ok = document.execCommand("copy");
+    } catch (e) {
+      ok = false;
+    }
+    ta.remove();
+  }
+  const orig = btn.textContent;
+  btn.textContent = ok ? "コピーしました" : "コピーできませんでした";
+  btn.disabled = true;
+  setTimeout(() => {
+    btn.textContent = orig;
+    btn.disabled = false;
+  }, 1500);
+}
+
+function copyButton(text) {
+  const btn = mkButton("primary copy-btn", "コピー", () => copyText(text, btn));
+  return btn;
+}
+
+function linkButton(link) {
+  if (!link || !link.url) return null;
+  const btn = mkButton("secondary link-btn", `${link.label_ja} ↗`, () => {
+    window.open(link.url, "_blank", "noopener");
+  });
+  return btn;
+}
+
+function guideSection(no, titleText) {
+  const sec = document.createElement("div");
+  sec.className = "guide-section";
+  const title = document.createElement("p");
+  title.className = "guide-section-title";
+  title.textContent = `${no}. ${titleText}`;
+  sec.appendChild(title);
+  return sec;
+}
+
+function codeRow(container, labelText, command) {
+  if (labelText) {
+    const label = document.createElement("div");
+    label.className = "help";
+    label.textContent = labelText;
+    container.appendChild(label);
+  }
+  const row = document.createElement("div");
+  row.className = "code-row";
+  const code = document.createElement("code");
+  code.className = "code-box";
+  code.textContent = command;
+  row.appendChild(code);
+  row.appendChild(copyButton(command));
+  container.appendChild(row);
+}
+
+// Recovery actions shown next to any SSH-authentication failure: copy the
+// public key again and jump straight to GitHub's key registration page.
+function sshRecoveryActions(id, links) {
+  const row = document.createElement("div");
+  row.className = "guide-links ssh-recovery";
+  const keyBtn = mkButton("primary copy-btn", "公開鍵をコピー", async () => {
+    try {
+      const r = await api(`/api/steps/${id}/pubkey`);
+      await copyText(r.pubkey, keyBtn);
+    } catch (err) {
+      alert("公開鍵を取得できませんでした: " + err.message);
+    }
+  });
+  row.appendChild(keyBtn);
+  const b = linkButton((links || {}).ssh_keys);
+  if (b) row.appendChild(b);
+  return row;
+}
+
+function renderConnectResult(container, r, id, links) {
+  container.innerHTML = "";
+  const box = document.createElement("div");
+  box.className = "connect-status " + (r.ok ? "ok" : "fail");
+  box.textContent = r.ok
+    ? "接続してpushしました 🎉 GitHub側にワークスペースが入っています。"
+    : "接続できませんでした。" + (r.hint ? " " + r.hint : "");
+  if (!r.ok && r.ssh_issue) {
+    box.appendChild(sshRecoveryActions(id, links));
+  }
+  container.appendChild(box);
+  if (r.output) {
+    const details = document.createElement("details");
+    if (!r.ok) details.open = true;
+    const summary = document.createElement("summary");
+    summary.textContent = "実行内容の詳細";
+    details.appendChild(summary);
+    const pre = document.createElement("div");
+    pre.className = "log-output";
+    pre.textContent = r.output;
+    details.appendChild(pre);
+    container.appendChild(details);
+  }
+}
+
+function renderPrecheckRepoResult(container, res, id, links) {
+  container.innerHTML = "";
+  const ul = document.createElement("ul");
+  ul.className = "check-list";
+  res.items.forEach((item) => {
+    const li = document.createElement("li");
+    const warn = item.warn || item.ok === null;
+    li.className = "check-item " + (warn ? "warn" : item.ok ? "ok" : "ng");
+    const mark = document.createElement("span");
+    mark.className = "check-mark";
+    mark.textContent = warn ? "!" : item.ok ? "✓" : "✗";
+    li.appendChild(mark);
+    const label = document.createElement("span");
+    label.className = "check-label";
+    label.textContent = item.message;
+    li.appendChild(label);
+    if (item.ssh_issue) {
+      li.appendChild(sshRecoveryActions(id, links));
+    }
+    ul.appendChild(li);
+  });
+  container.appendChild(ul);
+  if (res.all_ok) {
+    const p = document.createElement("p");
+    p.className = "help precheck-all-ok";
+    p.textContent = "すべてOKです。「接続して送信」で仕上げてください。";
+    container.appendChild(p);
+  }
+}
+
+async function renderClaudeSupportPanel(id, step, el) {
+  let res;
+  try {
+    res = await api(`/api/steps/${id}/result`);
+  } catch (err) {
+    return;
+  }
+  if (!res.available) return;
+
+  const links = step.guide_links || {};
+  const box = document.createElement("div");
+  box.className = "claude-guide-box";
+
+  const head = document.createElement("p");
+  head.className = "guide-head";
+  head.textContent = "導入できました!あと少し、下の手順で仕上げてください。";
+  box.appendChild(head);
+
+  const introLinks = document.createElement("div");
+  introLinks.className = "guide-links";
+  [linkButton(links.about_claude), linkButton(links.github_signup)].forEach((b) => {
+    if (b) introLinks.appendChild(b);
+  });
+  box.appendChild(introLinks);
+
+  // 1. create the private repository
+  const sec1 = guideSection(1, "GitHubで個人の「privateリポジトリ」を作成");
+  const repoNote = document.createElement("p");
+  repoNote.className = "help";
+  repoNote.textContent =
+    `リポジトリ名は ${res.repo_suggestion} にしてください(作業ログや記憶に内部情報が入るので、必ず private にしてください)`;
+  sec1.appendChild(repoNote);
+  const repoOptions = document.createElement("p");
+  repoOptions.className = "help";
+  repoOptions.textContent =
+    "作成画面では「Add a README file」にチェックを入れてください。License は Apache License 2.0 を選ぶのがおすすめです(CubePetit系リポジトリと同じ)。どちらも手順3の接続がそのまま取り込みます。";
+  sec1.appendChild(repoOptions);
+  const b1 = linkButton(links.new_repo);
+  if (b1) sec1.appendChild(b1);
+  box.appendChild(sec1);
+
+  // 2. register the public key (masked on screen; copy fetches the full key)
+  const sec2 = guideSection(2, "この公開鍵をGitHubに登録");
+  if (res.pubkey_masked) {
+    const row = document.createElement("div");
+    row.className = "code-row";
+    const code = document.createElement("code");
+    code.className = "code-box pubkey";
+    code.textContent = res.pubkey_masked;
+    row.appendChild(code);
+    const keyBtn = mkButton("primary copy-btn", "コピー", async () => {
+      try {
+        const r = await api(`/api/steps/${id}/pubkey`);
+        await copyText(r.pubkey, keyBtn);
+      } catch (err) {
+        alert("公開鍵を取得できませんでした: " + err.message);
+      }
+    });
+    row.appendChild(keyBtn);
+    sec2.appendChild(row);
+    const note = document.createElement("p");
+    note.className = "help";
+    note.textContent = "画面では一部を伏せています。「コピー」を押すと全文がクリップボードに入ります。";
+    sec2.appendChild(note);
+  } else {
+    const p = document.createElement("p");
+    p.className = "help";
+    p.textContent = `公開鍵を読み取れませんでした。ターミナルで cat ${res.pubkey_path || "~/.ssh/id_ed25519.pub"} を実行して内容を登録してください。`;
+    sec2.appendChild(p);
+  }
+  const b2 = linkButton(links.ssh_keys);
+  if (b2) sec2.appendChild(b2);
+  box.appendChild(sec2);
+
+  // 3. connect the workspace to the repository (one button; manual fallback)
+  const sec3 = guideSection(3, "ワークスペースをGitHubにつなぐ");
+  const connectHelp = document.createElement("p");
+  connectHelp.className = "help";
+  connectHelp.textContent = "GitHubアカウント名(またはOrganization名)を入れて「接続して送信」を押すと、接続と最初のpushまで自動で行います。";
+  sec3.appendChild(connectHelp);
+
+  const connectRow = document.createElement("div");
+  connectRow.className = "code-row";
+  const accountInput = document.createElement("input");
+  accountInput.type = "text";
+  accountInput.className = "repo-input";
+  accountInput.placeholder = "your-account";
+  connectRow.appendChild(accountInput);
+  const connectStatus = document.createElement("div");
+
+  // Live preview of the URL that will be used, so the user can eyeball the
+  // destination before pressing the button. The repo name is fixed to
+  // <robot_namespace>_claude -- only the account is typed in.
+  const urlPreview = document.createElement("p");
+  urlPreview.className = "help url-preview";
+  const updatePreview = () => {
+    const acc = accountInput.value.trim() || "<アカウント名>";
+    urlPreview.textContent = `接続先: git@github.com:${acc}/${res.repo_suggestion}.git`;
+  };
+  updatePreview();
+  accountInput.addEventListener("input", () => {
+    updatePreview();
+    // Editing the account invalidates any previous check result.
+    precheckPassed = false;
+    precheckStatus.innerHTML = "";
+    applyGate();
+  });
+
+  const precheckStatus = document.createElement("div");
+
+  // The connect button stays disabled until a pre-connect check has passed
+  // all three items; editing the account re-requires a check.
+  let precheckPassed = false;
+  const GATE_HINT = "先に「チェック」を押してください";
+  const gateNote = document.createElement("p");
+  gateNote.className = "help gate-note";
+  gateNote.textContent = "先に「チェック」を押してください(3項目すべてOKになると送信できます)。";
+
+  const applyGate = () => {
+    connectBtn.disabled = !precheckPassed;
+    connectBtn.title = precheckPassed ? "" : GATE_HINT;
+    gateNote.hidden = precheckPassed;
+  };
+
+  const checkBtn = mkButton("secondary", "チェック", async () => {
+    checkBtn.disabled = true;
+    checkBtn.textContent = "確認中...";
+    precheckStatus.innerHTML = "";
+    try {
+      const r = await api(`/api/steps/${id}/precheck_repo`, {
+        method: "POST",
+        body: { account: accountInput.value },
+      });
+      renderPrecheckRepoResult(precheckStatus, r, id, links);
+      precheckPassed = !!r.all_ok;
+    } catch (err) {
+      renderConnectResult(precheckStatus, { ok: false, output: "", hint: err.message }, id, links);
+      precheckPassed = false;
+    } finally {
+      checkBtn.disabled = false;
+      checkBtn.textContent = "チェック";
+      applyGate();
+    }
+  });
+  connectRow.appendChild(checkBtn);
+
+  const connectBtn = mkButton("primary", "接続して送信", async () => {
+    connectBtn.disabled = true;
+    connectBtn.textContent = "接続中...";
+    connectStatus.innerHTML = "";
+    try {
+      const r = await api(`/api/steps/${id}/connect_repo`, {
+        method: "POST",
+        body: { account: accountInput.value },
+      });
+      renderConnectResult(connectStatus, r, id, links);
+    } catch (err) {
+      renderConnectResult(connectStatus, { ok: false, output: "", hint: err.message }, id, links);
+    } finally {
+      connectBtn.disabled = false;
+      connectBtn.textContent = "接続して送信";
+    }
+  });
+  connectRow.appendChild(connectBtn);
+  applyGate();
+  sec3.appendChild(connectRow);
+  sec3.appendChild(urlPreview);
+  sec3.appendChild(gateNote);
+  sec3.appendChild(precheckStatus);
+  sec3.appendChild(connectStatus);
+
+  const manual = document.createElement("details");
+  manual.className = "manual-fallback";
+  const manualSummary = document.createElement("summary");
+  manualSummary.textContent = "手動でやる場合(ターミナルでコピー&ペースト)";
+  manual.appendChild(manualSummary);
+  (res.connect_commands || []).forEach((c) => codeRow(manual, c.label_ja, c.command));
+  sec3.appendChild(manual);
+  box.appendChild(sec3);
+
+  // 4. first login: one-click terminal on the robot's screen, with the
+  // copy-paste command kept as the manual alternative
+  const sec4 = guideSection(4, "Claude Codeを起動して初回ログイン");
+  const termStatus = document.createElement("p");
+  termStatus.className = "help";
+  const termBtn = mkButton("primary", "claudeをターミナルで起動", async () => {
+    termBtn.disabled = true;
+    termStatus.classList.remove("term-fail");
+    termStatus.textContent = "起動中...";
+    try {
+      const r = await api(`/api/steps/${id}/open_terminal`, { method: "POST", body: {} });
+      termStatus.textContent = r.message || (r.ok ? "起動しました。" : "起動できませんでした。");
+      termStatus.classList.toggle("term-fail", !r.ok);
+    } catch (err) {
+      termStatus.textContent = "起動できませんでした: " + err.message + " 手動でターミナルを開いて、コピーしたコマンドを実行してください。";
+      termStatus.classList.add("term-fail");
+    } finally {
+      termBtn.disabled = false;
+    }
+  });
+  const termRow = document.createElement("div");
+  termRow.className = "guide-links";
+  termRow.appendChild(termBtn);
+  sec4.appendChild(termRow);
+  const termNote = document.createElement("p");
+  termNote.className = "help";
+  termNote.textContent = "※この機体の画面にターミナルが開きます(タブレットから操作している場合は機体の画面を見てください)。";
+  sec4.appendChild(termNote);
+  sec4.appendChild(termStatus);
+  if (res.login_command) {
+    codeRow(sec4, res.login_command.label_ja, res.login_command.command);
+  }
+  box.appendChild(sec4);
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+  actions.appendChild(mkButton("primary", "次へ", () => goToNextStep(id)));
+  box.appendChild(actions);
+
+  el.appendChild(box);
 }
 
 // --- sensor connection check (step 8) ---------------------------------------
@@ -591,6 +969,13 @@ function renderDetail(id) {
     // would loop (see attachStream).
     attachStream(id, id, { reloadOnEnd: running });
     logPanel.open = running || step.status === "failed";
+  }
+
+  // The claude_support step renders a post-run guide panel (repo / key /
+  // commands, each with copy buttons) instead of auto-advancing; the user
+  // moves on via the panel's explicit "next" button.
+  if (id === "claude_support" && step.status === "done") {
+    renderClaudeSupportPanel(id, step, el);
   }
 
   // Celebrate once every step is done/skipped, shown below the last step's
