@@ -124,6 +124,67 @@ def _hint_for(label: str) -> str:
     return "接続を確認し、必要ならデバイス設定をやり直してください。"
 
 
+# Japanese translation of udev_check.sh result lines. The script's own output
+# stays in English (it is also run standalone from a terminal); the web app
+# translates at display time. Order matters: first match wins. Rules are
+# (regex over the raw text after [OK]/[NG], label_ja, message_ja) where
+# message_ja may reference regex groups with {1}, {2}, ...
+_DEV_LABELS_JA = {
+    "ttyWitMotion": "IMU(姿勢センサ)",
+    "ttyCANable": "CAN(モーター通信)",
+    "ttyLD06-19": "LiDAR(距離センサ)",
+}
+
+_CHECK_JA_RULES: list[tuple[re.Pattern, str, str]] = [
+    (re.compile(r"^/dev/(\S+) is not found, but can0 is up"), "CAN(モーター通信)",
+     "can0が動作しています(通信ポートは使用中のため見えませんが、正常です)"),
+    (re.compile(r"^/dev/(\S+) is found$"), "", "接続されています"),
+    (re.compile(r"^/dev/(\S+) is not found$"), "",
+     "見つかりません。USBケーブルの接続を確認してください"),
+    (re.compile(r"^can0 found,\s*、?RX packets = (\d+)"), "CAN(モーター通信)データ",
+     "データがきています(受信 {1} パケット)"),
+    (re.compile(r"^can0 found, but RX packets is 0"), "CAN(モーター通信)データ",
+     "つながっていますが、データがきていません(ロボット本体の電源が入っていないときは、これで正常です)"),
+    (re.compile(r"^No can0$"), "CAN(モーター通信)", "can0が見つかりません"),
+    (re.compile(r"^Wi-Fi IF = (\S+), IP = (\S+)"), "Wi-Fi", "接続されています(IPアドレス: {2})"),
+    (re.compile(r"^No Wi-Fi IF$"), "Wi-Fi", "接続されていません"),
+    (re.compile(r"^Sound_Blaster microphone found"), "マイク(SoundBlaster)", "認識されています"),
+    (re.compile(r"^Sound_Blaster microphone not found"), "マイク(SoundBlaster)", "見つかりません"),
+    (re.compile(r"^Sound_Blaster speaker found"), "スピーカー(SoundBlaster)", "認識されています"),
+    (re.compile(r"^Sound_Blaster speaker not found"), "スピーカー(SoundBlaster)", "見つかりません"),
+    (re.compile(r"^LiDAR is sending data \((\d+) bytes"), "LiDARデータ", "データがきています({1} バイト受信)"),
+    (re.compile(r"^LiDAR device found but no data received"), "LiDARデータ",
+     "つながっていますが、データがきていません"),
+    (re.compile(r"^LiDAR device not found"), "LiDAR(距離センサ)", "見つかりません"),
+    (re.compile(r"^IMU is sending data \((\d+) bytes"), "IMUデータ", "データがきています({1} バイト受信)"),
+    (re.compile(r"^IMU device found but no data received"), "IMUデータ",
+     "つながっていますが、データがきていません"),
+    (re.compile(r"^IMU device not found"), "IMU(姿勢センサ)", "見つかりません"),
+    (re.compile(r"^RealSense device detected"), "RealSense(カメラ)", "認識されています"),
+    (re.compile(r"^No Intel RealSense device detected"), "RealSense(カメラ)", "見つかりません"),
+    (re.compile(r"^bluetoothctl not found"), "Bluetooth", "bluetoothctlがインストールされていません"),
+    (re.compile(r"^No Bluetooth devices connected"), "Bluetoothコントローラ", "接続されていません"),
+    (re.compile(r"^Bluetooth controller connected"), "Bluetoothコントローラ", "接続されています"),
+    (re.compile(r"^Bluetooth device connected, but no controller detected"), "Bluetoothコントローラ",
+     "Bluetooth機器はつながっていますが、コントローラが見つかりません"),
+]
+
+
+def _translate_check_line(raw: str) -> Optional[tuple[str, str]]:
+    """(label_ja, message_ja) for a known udev_check.sh line, else None so
+    unknown/future lines fall back to the raw English text unchanged."""
+    for pattern, label_ja, message_ja in _CHECK_JA_RULES:
+        m = pattern.match(raw)
+        if not m:
+            continue
+        if not label_ja:  # generic /dev/<name> rule: label depends on the device
+            label_ja = _DEV_LABELS_JA.get(m.group(1), m.group(1))
+        for i, g in enumerate(m.groups(), start=1):
+            message_ja = message_ja.replace("{%d}" % i, g or "")
+        return label_ja, message_ja
+    return None
+
+
 def _parse_check_log(raw_log: str) -> list[dict]:
     items = []
     for line in raw_log.splitlines():
@@ -133,7 +194,14 @@ def _parse_check_log(raw_log: str) -> list[dict]:
             continue
         ok = m.group(1) == "OK"
         label = m.group(2).strip()
-        items.append({"label": label, "ok": ok, "detail": None if ok else _hint_for(label)})
+        translated = _translate_check_line(label)
+        items.append({
+            "label": label,
+            "label_ja": translated[0] if translated else None,
+            "message_ja": translated[1] if translated else None,
+            "ok": ok,
+            "detail": None if ok else _hint_for(label),
+        })
     return items
 
 
