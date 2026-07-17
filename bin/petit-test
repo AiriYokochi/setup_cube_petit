@@ -2,16 +2,21 @@
 # petit-test: PRを実機でサクッとテストするためのヘルパー
 #
 # 使い方:
-#   petit-test <repo> <pr-number> [-f]   PRのコードを ~/ros_test にビルドしてtmuxを起動
+#   petit-test <repo> <pr-number> [-f] [--no-pane]
+#       PRのコードを ~/ros_test にビルドしてtmuxを起動
+#       -f          既存のtmuxセッションを確認なしで作り直す
+#       --no-pane   ビルドまでで終了し、tmuxセッションは作らない
 #   petit-test clean                     ~/ros_test とtmuxセッションを片付ける
 #
 # 例:
 #   petit-test cube_petit_scenario 4
+#   petit-test cube_petit_scenario 4 --no-pane   # ビルドの成否だけ知りたいとき
 #
 # 安全性:
 #   - 稼働中ワークスペース ~/ros のソース・installには一切手を入れない
 #     (~/ros/src/<repo> へは git fetch と git worktree のメタデータ追加のみ)
 #   - PRのコードは ~/ros_test に別ワークスペース(オーバーレイ)としてビルドする
+#   - tmuxペインに入力するコマンドはEnterを押さない(内容を確認してから実行する)
 
 set -u
 
@@ -74,8 +79,16 @@ esac
 
 REPO="$1"
 PR="$2"
+shift 2
 FORCE=0
-[ "${3:-}" = "-f" ] && FORCE=1
+NO_PANE=0
+for arg in "$@"; do
+    case "$arg" in
+        -f) FORCE=1 ;;
+        --no-pane) NO_PANE=1 ;;
+        *) die "不明なオプション: $arg" ;;
+    esac
+done
 
 REPO_DIR="$HOME/ros/src/$REPO"
 [ -d "$REPO_DIR/.git" ] || die "$REPO_DIR がgitリポジトリではありません(repo名を確認してください)"
@@ -188,6 +201,10 @@ SUMMARY="$TEST_WS/pr_summary.md"
         echo "$body"
     fi
 } > "$SUMMARY"
+
+# 実機確認手順の最初の ```bash コードブロックを抽出(起動用ペインに打ち込んでおく用)
+LAUNCH_CMD=$(awk '/^```bash/{flag=1; next} /^```/{if(flag) exit} flag' "$SUMMARY" \
+    | grep -v '^\s*#' | grep -v '^\s*$' | head -1)
 echo
 echo "==================== PRサマリ ===================="
 cat "$SUMMARY"
@@ -195,6 +212,11 @@ echo "=================================================="
 echo
 
 # ---------------------------------------------------------------- 6. tmuxセッション
+if [ "$NO_PANE" -eq 1 ]; then
+    info "--no-pane 指定のためtmuxは起動しません(ビルドのみ)"
+    exit 0
+fi
+
 if ! command -v tmux >/dev/null 2>&1; then
     warn "tmuxが見つかりません。手動でターミナルを開いて以下を実行してください:"
     echo "  $SETUP_CMD"
@@ -227,7 +249,13 @@ tmux select-pane -t "$P0" -T "PRサマリ"
 tmux send-keys -t "$P0" "$SETUP_CMD; clear; cat $SUMMARY" C-m
 
 tmux select-pane -t "$P1" -T "起動用"
-tmux send-keys -t "$P1" "$SETUP_CMD; clear; echo '# 起動用: 例) ros2 launch <package> <launch file>'" C-m
+tmux send-keys -t "$P1" "$SETUP_CMD; clear" C-m
+if [ -n "$LAUNCH_CMD" ]; then
+    # PR本文の実機確認手順から拾った実際のコマンド。中身を確認してEnterを押す(自動実行しない)
+    tmux send-keys -t "$P1" "$LAUNCH_CMD"
+else
+    tmux send-keys -t "$P1" "echo '# 起動用: 例) ros2 launch <package> <launch file>'" C-m
+fi
 
 tmux select-pane -t "$P2" -T "確認用"
 tmux send-keys -t "$P2" "$SETUP_CMD; clear; echo '# 確認用: 例) ros2 topic list / ros2 topic echo <topic>'" C-m
