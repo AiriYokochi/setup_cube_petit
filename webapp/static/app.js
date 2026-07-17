@@ -296,7 +296,28 @@ function renderBtDeviceList(container, devices, stepId) {
   container.appendChild(ul);
 }
 
+function goToNextStep(id) {
+  const idx = state.data.steps.findIndex((s) => s.id === id);
+  if (idx === -1) return;
+  const next = state.data.steps[idx + 1];
+  if (next) selectStep(next.id);
+}
+
 function renderBluetoothStep(id, step, el, actions) {
+  if (step.status === "done") {
+    // Connection already succeeded (either just now, or on a previous visit
+    // to this step). Unlike run-type steps, there is no automatic advance
+    // here -- show the result plainly and let the user press an explicit
+    // "next" button, since re-scanning/re-connecting is still possible below.
+    const doneBox = document.createElement("div");
+    doneBox.className = "bt-done-box";
+    doneBox.textContent = "Bluetoothコントローラの接続が完了しました。";
+    el.appendChild(doneBox);
+
+    const nextBtn = mkButton("primary", "次へ", () => goToNextStep(id));
+    actions.appendChild(nextBtn);
+  }
+
   const scanStatus = document.createElement("p");
   scanStatus.className = "help";
   el.appendChild(scanStatus);
