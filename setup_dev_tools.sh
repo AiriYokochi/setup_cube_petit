@@ -37,4 +37,19 @@ else
   echo "Skip VS Code"
 fi
 
+# AnyDesk (remote support). Opt-in: only for machines whose owner will
+# receive remote support. Requires an Xorg session for incoming connections
+# (setup_pc.bash sets WaylandEnable=false; effective after a reboot).
+if confirm "Install AnyDesk (remote support)?"; then
+  echo -e '\e[1;33m == Install AnyDesk (remote support) == \e[m'
+  wget -qO- https://keys.anydesk.com/repos/DEB-GPG-KEY \
+    | sudo gpg --yes --dearmor -o /usr/share/keyrings/anydesk.gpg
+  echo "deb [signed-by=/usr/share/keyrings/anydesk.gpg] http://deb.anydesk.com/ all main" \
+    | sudo tee /etc/apt/sources.list.d/anydesk.list
+  sudo apt update
+  sudo apt install -y anydesk
+else
+  echo "Skip AnyDesk"
+fi
+
 echo -e '\e[1;32m == Install Dev Tools is Finished == \e[m'

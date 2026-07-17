@@ -73,5 +73,12 @@ if ! sudo grep -q '^AutomaticLoginEnable=true' /etc/gdm3/custom.conf; then
   sudo sed -i '/^\[daemon\]/a AutomaticLoginEnable=true\nAutomaticLogin='$(whoami) /etc/gdm3/custom.conf
 fi
 
+# Force Xorg sessions (disable Wayland). Remote-desktop tools (AnyDesk) do
+# not support incoming connections on Wayland, and with auto-login enabled
+# there is no login screen to pick "Ubuntu on Xorg" from. Applied on reboot.
+if ! sudo grep -q '^WaylandEnable=false' /etc/gdm3/custom.conf; then
+  sudo sed -i '/^\[daemon\]/a WaylandEnable=false' /etc/gdm3/custom.conf
+fi
+
 echo -e '\e[1;31m == Setup PC Finished == \e[m'
 echo 'Auto-login and other display settings take effect after the next reboot.'
