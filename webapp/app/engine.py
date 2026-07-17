@@ -188,6 +188,56 @@ def _build_script_cmd(script_name: str) -> str:
     return _cmd_or_mock(real_cmd, f"bash {script_name}", 3)
 
 
+def _mock_check_cmd() -> str:
+    """A fake udev_check.sh-like log: same "[OK]"/"[NG]" line shape as the
+    real script (see shell_scripts/udev_check.sh), colored the same way,
+    so main.py's log parser can be exercised without touching real devices.
+    Real ESC bytes are embedded directly (via shlex.quote, which single-quotes
+    and so passes them through untouched) instead of relying on `echo -e`,
+    which is not portably available across /bin/sh implementations."""
+    ESC = "\x1b"
+    GREEN, RED, NC = f"{ESC}[32m", f"{ESC}[31m", f"{ESC}[0m"
+
+    def ok(text: str) -> str:
+        return f"echo {shlex.quote(f'{GREEN}[OK]{NC} {text}')}"
+
+    def ng(text: str) -> str:
+        return f"echo {shlex.quote(f'{RED}[NG]{NC} {text}')}"
+
+    lines = [
+        'echo "=== /dev device check ==="',
+        ok("/dev/ttyWitMotion is found"),
+        ok("/dev/ttyCANable is found"),
+        ng("/dev/ttyLD06-19 is not found"),
+        'echo ""',
+        'echo "=== CAN (can0) check ==="',
+        ng("No can0"),
+        'echo ""',
+        'echo "=== Wi-Fi interface ==="',
+        ok("Wi-Fi IF = wlan0, IP = 192.168.1.50"),
+        'echo ""',
+        'echo "=== Audio Device Check (Sound_Blaster required) ==="',
+        ok("Sound_Blaster microphone found: alsa_input.mock"),
+        ok("Sound_Blaster speaker found: alsa_output.mock"),
+        'echo ""',
+        'echo "=== RealSense Check ==="',
+        ng("No Intel RealSense device detected"),
+        'echo ""',
+        'echo "=== Bluetooth Controller Check ==="',
+        ok("Bluetooth controller connected:"),
+        'sleep 1',
+        'echo ""',
+        'echo "[mock] done."',
+    ]
+    return "\n".join(lines)
+
+
+def _build_check_cmd(script_name: str) -> str:
+    if MOCK:
+        return _mock_check_cmd()
+    return f"bash {shlex.quote(str(script_path(script_name)))}"
+
+
 def _build_toggle_cmd(
     script_name: str, input_defs: list[dict], inputs: dict
 ) -> tuple[str, Optional[str]]:
@@ -215,6 +265,8 @@ async def run_step(step_def: dict, inputs: dict) -> StepRun:
     if step_type == "toggle_script":
         cmd, stdin_text = _build_toggle_cmd(step_def["script"], step_def["inputs"], inputs)
         return await start_command(step_id, cmd, cwd=REPO_ROOT, stdin_text=stdin_text)
+    if step_type == "check":
+        return await start_command(step_id, _build_check_cmd(step_def["script"]), cwd=REPO_ROOT)
     raise ValueError(f"step type {step_type!r} is not directly runnable via run_step()")
 
 

@@ -85,6 +85,46 @@ class BluetoothConnectBody(BaseModel):
     mac: str
 
 
+# --- sensor connection check (step 8) log parsing ---------------------------
+#
+# udev_check.sh (shell_scripts/udev_check.sh) prints one colored "[OK] ..."
+# / "[NG] ..." line per item it checks. We don't reimplement the checks
+# here, just parse its already-produced log.
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+_CHECK_ITEM_RE = re.compile(r"^\[(OK|NG)\]\s*(.+)$")
+
+_CHECK_HINTS: list[tuple[re.Pattern, str]] = [
+    (re.compile("imu", re.I), "IMUケーブルの接続を確認して、デバイス設定のIMUを実行しましたか?"),
+    (re.compile(r"can0|canable|\bcan\b", re.I), "CANケーブルの接続を確認して、デバイス設定のCANを実行しましたか?"),
+    (re.compile("lidar|ld06", re.I), "LiDARのUSB接続を確認してください。"),
+    (re.compile("wi-?fi", re.I), "Wi-Fiに接続されているか確認してください。"),
+    (re.compile("sound_blaster|audio", re.I), "SoundBlasterのUSB接続と、デバイス設定のスピーカーを確認してください。"),
+    (re.compile("realsense", re.I), "RealSenseのUSB接続と、デバイス設定のRealSenseを実行しましたか?"),
+    (re.compile("bluetooth|controller", re.I), "ステップ7でBluetoothコントローラを接続しましたか?"),
+]
+
+
+def _hint_for(label: str) -> str:
+    for pattern, hint in _CHECK_HINTS:
+        if pattern.search(label):
+            return hint
+    return "接続を確認し、必要ならデバイス設定をやり直してください。"
+
+
+def _parse_check_log(raw_log: str) -> list[dict]:
+    items = []
+    for line in raw_log.splitlines():
+        clean = _ANSI_RE.sub("", line).strip()
+        m = _CHECK_ITEM_RE.match(clean)
+        if not m:
+            continue
+        ok = m.group(1) == "OK"
+        label = m.group(2).strip()
+        items.append({"label": label, "ok": ok, "detail": None if ok else _hint_for(label)})
+    return items
+
+
 # --- pages ---------------------------------------------------------------
 
 @app.get("/")
@@ -245,6 +285,21 @@ async def bluetooth_devices():
 @app.post("/api/bluetooth/connect")
 async def bluetooth_connect(body: BluetoothConnectBody):
     return await engine.bluetooth_connect(body.mac)
+
+
+# --- sensor connection check (step 8) ---------------------------------------
+
+@app.get("/api/steps/{step_id}/result")
+async def get_check_result(step_id: str):
+    step_def = _get_step_or_404(step_id)
+    if step_def["type"] != "check":
+        raise HTTPException(400, "this step has no check result")
+    log_path = state_mod.log_path_for(step_id)
+    if not log_path.exists():
+        return {"items": [], "ok_count": 0, "total": 0}
+    items = _parse_check_log(log_path.read_text(encoding="utf-8"))
+    ok_count = sum(1 for i in items if i["ok"])
+    return {"items": items, "ok_count": ok_count, "total": len(items)}
 
 
 # --- log streaming (SSE) ---------------------------------------------------

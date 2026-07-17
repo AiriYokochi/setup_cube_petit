@@ -146,3 +146,16 @@ steps:
     needs_sudo: false
     skippable: true
     requires_reboot: false
+
+  - id: device_check
+    title_ja: "8. センサ接続確認"
+    description_ja: |
+      IMU・CAN・LiDAR・Wi-Fi・SoundBlaster・RealSense・Bluetoothコントローラが
+      正しく認識されているか、まとめて確認します(udev_check.sh を実行します)。
+      NGの項目があっても、この画面から先に進めます。あとで機器を接続し直してから
+      「もう一度チェック」を押せば再確認できます。
+    type: check
+    script: shell_scripts/udev_check.sh
+    needs_sudo: false
+    skippable: false
+    requires_reboot: false

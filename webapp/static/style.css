@@ -298,6 +298,42 @@ details.log-panel summary {
 }
 .bt-device-info { font-size: 0.95rem; word-break: break-all; }
 
+/* --- sensor connection check (step 8) --------------------------------------- */
+
+.check-status { font-weight: 600; }
+.check-list {
+  list-style: none;
+  margin: 0.4rem 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.check-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.check-item.ok { background: rgba(22, 163, 74, 0.08); }
+.check-item.ng { background: rgba(220, 38, 38, 0.08); }
+.check-mark {
+  font-weight: 700;
+  width: 1.2rem;
+  text-align: center;
+}
+.check-item.ok .check-mark { color: var(--ok); }
+.check-item.ng .check-mark { color: var(--fail); }
+.check-label { flex: 1 1 auto; }
+.check-hint {
+  flex: 1 0 100%;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
 .placeholder { color: var(--muted); }
 
 @media (prefers-color-scheme: dark) {
