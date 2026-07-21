@@ -244,6 +244,29 @@ async def index():
     return FileResponse(str(STATIC_DIR / "index.html"))
 
 
+# --- fleet landing page ----------------------------------------------------
+# A simple "which robot do you want to open?" page. The robot list lives in
+# webapp/fleet.yaml (user-editable data, read on every request so edits show
+# up on reload without restarting the server).
+
+FLEET_FILE = WEBAPP_DIR / "fleet.yaml"
+
+
+@app.get("/fleet")
+async def fleet_page():
+    return FileResponse(str(STATIC_DIR / "fleet.html"))
+
+
+@app.get("/api/fleet")
+async def get_fleet():
+    try:
+        with open(FLEET_FILE, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError):
+        data = {}
+    return {"robots": data.get("robots", []), "ports": data.get("ports", {})}
+
+
 # --- state / steps ---------------------------------------------------------
 
 @app.get("/api/state")

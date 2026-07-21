@@ -11,6 +11,9 @@
     <h1>Cube Petit セットアップ</h1>
     <span id="mock-badge" class="mock-badge" hidden>MOCK モード(疑似実行)</span>
     <button id="report-button" class="report-button" type="button">不具合を報告</button>
+    <!-- Static link (no app.js involvement) to the fleet landing page. Inline
+         style on purpose: keeps style.css untouched for parallel branches. -->
+    <a href="/fleet" style="color: inherit; font-size: 0.85rem; text-decoration: none; border: 1px solid rgba(255,255,255,0.5); border-radius: 999px; padding: 0.3rem 0.9rem; margin-left: 0.6rem;">機体一覧</a>
   </header>
 
   <div id="report-overlay" class="report-overlay" hidden></div>
