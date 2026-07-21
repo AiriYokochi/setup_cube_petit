@@ -158,19 +158,27 @@ async def update_self() -> dict:
     await git("fetch", "--tags", "--quiet", timeout=30)
     has_tags, tag = await _next_release_tag(git)
     if has_tags and tag is None:
-        return {"ok": True, "updated": False, "output": "すでに最新のリリースです。"}
+        return {"ok": True, "updated": False,
+                "output": "すでに最新のリリースです。",
+                "output_en": "Already on the latest release."}
     if tag:
         code, text = await git("merge", "--ff-only", tag, timeout=60)
     else:
         code, text = await git("pull", "--ff-only", timeout=60)
     if code == 124:
-        return {"ok": False, "output": "git の実行がタイムアウトしました。ネットワークを確認してください。"}
+        return {"ok": False,
+                "output": "git の実行がタイムアウトしました。ネットワークを確認してください。",
+                "output_en": "git timed out. Check your network connection."}
     if code != 0:
         hint = (
             "ローカルに手作業の変更があると自動更新できません。"
             "ターミナルで git status を確認してください。"
         )
-        return {"ok": False, "output": f"{text}\n{hint}"}
+        hint_en = (
+            "Automatic updates cannot run over local manual changes. "
+            "Check `git status` in a terminal."
+        )
+        return {"ok": False, "output": f"{text}\n{hint}", "output_en": f"{text}\n{hint_en}"}
     await refresh()
     return {"ok": True, "updated": True, "output": text}
 

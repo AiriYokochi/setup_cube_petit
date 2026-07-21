@@ -7,6 +7,287 @@ const state = {
   updates: null, // /api/updates result: {self, robot} upstream status
 };
 
+// --- i18n -------------------------------------------------------------------
+//
+// Three sources of user-facing text, three rules:
+//   1. steps.yaml data: *_ja / *_en key pairs -> L(obj, "title") picks by
+//      language, falling back to _ja so a missing translation never blanks.
+//   2. server-produced messages: {message, message_en} pairs -> pickMsg().
+//   3. frontend-owned strings: the STR table below -> t("key", args...).
+// The choice is stored in localStorage and defaults to the browser language.
+
+const STR = {
+  ja: {
+    app_title: "Cube Petit セットアップ",
+    mock_badge: "MOCK モード(疑似実行)",
+    report_btn: "不具合を報告",
+    placeholder: "左のリストからステップを選んでください。",
+    status_done: "完了しました",
+    status_running: "実行中...",
+    status_interrupted: "中断されました(サーバーが途中で終了しました)。もう一度実行してください。",
+    status_failed: (code) => `失敗しました (終了コード: ${code})`,
+    status_pending: "未実行",
+    status_skipped: "スキップしました",
+    progress_steps: (n, total) => `${n} / ${total} ステップ`,
+    badge_update: "更新あり",
+    log_panel: "実行ログ",
+    log_truncated: (n) => `(先頭 ${n} 行は省略)`,
+    error: (msg) => `エラー: ${msg}`,
+    run: "実行",
+    run_again: "もう一度実行",
+    skip: "スキップ",
+    reboot_ack: "確認しました(この後、機体を再起動してください)",
+    rerun_note: "このステップの処理内容がアップデートで変わっています。「もう一度実行」で反映してください(再実行しても安全です)。",
+    bt_none: "デバイスが見つかりませんでした。コントローラをペアリングモードにしてから、もう一度スキャンしてください。",
+    bt_unnamed: "(名称不明)",
+    bt_paired: " [ペア済み]",
+    bt_connect: "接続",
+    bt_connected: "接続済み",
+    bt_connecting: "接続中...",
+    bt_connected_suffix: " — 接続しました",
+    bt_connect_failed: (d) => `接続に失敗しました: ${d}`,
+    bt_done: "Bluetoothコントローラの接続が完了しました。",
+    bt_scan: "スキャン",
+    bt_scanning: "スキャン中...(数秒かかります)",
+    bt_found: (n) => `${n}件のデバイスが見つかりました。`,
+    next: "次へ",
+    copy: "コピー",
+    copied: "コピーしました",
+    copy_failed: "コピーできませんでした",
+    pubkey_fetch_failed: (msg) => `公開鍵を取得できませんでした: ${msg}`,
+    copy_pubkey: "公開鍵をコピー",
+    connect_ok: "接続してpushしました 🎉 GitHub側にワークスペースが入っています。",
+    connect_fail: "接続できませんでした。",
+    exec_details: "実行内容の詳細",
+    precheck_all_ok: "すべてOKです。「接続して送信」で仕上げてください。",
+    guide_head: "導入できました!あと少し、下の手順で仕上げてください。",
+    guide_sec1: "GitHubで個人の「privateリポジトリ」を作成",
+    guide_repo_note: (repo) => `リポジトリ名は ${repo} にしてください(作業ログや記憶に内部情報が入るので、必ず private にしてください)`,
+    guide_repo_options: "作成画面では「Add a README file」にチェックを入れてください。License は Apache License 2.0 を選ぶのがおすすめです(CubePetit系リポジトリと同じ)。どちらも手順3の接続がそのまま取り込みます。",
+    guide_sec2: "この公開鍵をGitHubに登録",
+    guide_mask_note: "画面では一部を伏せています。「コピー」を押すと全文がクリップボードに入ります。",
+    guide_pubkey_missing: (path) => `公開鍵を読み取れませんでした。ターミナルで cat ${path} を実行して内容を登録してください。`,
+    guide_sec3: "ワークスペースをGitHubにつなぐ",
+    guide_connect_help: "GitHubアカウント名(またはOrganization名)を入れて「接続して送信」を押すと、接続と最初のpushまで自動で行います。",
+    guide_url_preview: (acc, repo) => `接続先: git@github.com:${acc}/${repo}.git`,
+    guide_account_placeholder_token: "<アカウント名>",
+    gate_hint: "先に「チェック」を押してください",
+    gate_note: "先に「チェック」を押してください(3項目すべてOKになると送信できます)。",
+    check_btn: "チェック",
+    checking: "確認中...",
+    connect_btn: "接続して送信",
+    connecting: "接続中...",
+    manual_fallback: "手動でやる場合(ターミナルでコピー&ペースト)",
+    guide_sec4: "Claude Codeを起動して初回ログイン",
+    term_btn: "claudeをターミナルで起動",
+    term_starting: "起動中...",
+    term_started: "起動しました。",
+    term_failed: "起動できませんでした。",
+    term_failed_manual: (msg) => `起動できませんでした: ${msg} 手動でターミナルを開いて、コピーしたコマンドを実行してください。`,
+    term_note: "※この機体の画面にターミナルが開きます(タブレットから操作している場合は機体の画面を見てください)。",
+    check_run: "チェック実行",
+    check_again: "もう一度チェック",
+    check_ok_badge: "✓ 成功",
+    check_ng_badge: "✗ 失敗",
+    changes: "変更内容を見る",
+    upd_release: (what, tag) => `${what}に新しいリリース ${tag} があります`,
+    upd_behind: (what, n) => `${what}に更新があります(${n}件)`,
+    upd_self_name: "セットアップツール",
+    upd_robot_name: "ロボットのソフトウェア",
+    upd_btn: "アップデート",
+    updating: "更新中...",
+    upd_latest: "すでに最新のリリースです。",
+    upd_failed: (out) => `更新できませんでした: ${out}`,
+    upd_failed_net: (msg) => `更新できませんでした(通信エラー): ${msg} — もう一度お試しください。`,
+    upd_applying: "アップデートを適用しています。自動で再起動します…",
+    upd_restarted: "再起動しました。画面を読み込み直します…",
+    upd_no_restart: "自動再起動を確認できませんでした。ターミナルで run.sh を手動で起動し直してください。",
+    reload_page: "ページを再読み込み",
+    robot_upd_suffix: "。「ロボットソフトをアップデート」を押すと、取得して再ビルドします。",
+    robot_upd_btn: "ロボットソフトをアップデート",
+    installed_hint: "✓ インストール済みです(もう一度入れ直す場合はチェックしてください)",
+    report_title: "不具合を報告",
+    report_symptom_label: "どんな不具合ですか?(必須。1行目がタイトルになります)",
+    report_symptom_placeholder: "例: ステップ7のデバイス設定を実行すると、スピーカーの設定で失敗します",
+    report_diag_label: "自動で添付される診断情報(編集できます。個人情報が無いか確認してください)",
+    report_loading: "読み込み中...",
+    report_diag_failed: "(診断情報を取得できませんでした)",
+    report_note: "「GitHubで報告する」には無料のGitHubアカウントが必要です。投稿画面で内容を確認してから送信してください。GitHubを使わない場合は「内容をコピー」でメール等に貼り付けられます。",
+    report_gh_btn: "GitHubで報告する",
+    report_copy_btn: "内容をコピー",
+    close: "閉じる",
+    report_default_title: "セットアップで不具合",
+    report_no_symptom: "(症状未記入)",
+    report_sec_symptom: "症状",
+    report_sec_diag: "診断情報",
+    report_trimmed: "(長いため以降を省略)",
+    notice_none: "✅ アップデート完了。再実行が必要なステップはありません。これで完了です。",
+    notice_some: "✅ アップデート完了。このアップデートで再実行が必要なステップ:",
+  },
+  en: {
+    app_title: "Cube Petit Setup",
+    mock_badge: "MOCK mode (simulated)",
+    report_btn: "Report a problem",
+    placeholder: "Pick a step from the list on the left.",
+    status_done: "Done",
+    status_running: "Running...",
+    status_interrupted: "Interrupted (the server stopped mid-run). Please run it again.",
+    status_failed: (code) => `Failed (exit code: ${code})`,
+    status_pending: "Not run yet",
+    status_skipped: "Skipped",
+    progress_steps: (n, total) => `${n} / ${total} steps`,
+    badge_update: "Update",
+    log_panel: "Run log",
+    log_truncated: (n) => `(first ${n} lines omitted)`,
+    error: (msg) => `Error: ${msg}`,
+    run: "Run",
+    run_again: "Run again",
+    skip: "Skip",
+    reboot_ack: "Got it (please reboot the robot after this)",
+    rerun_note: "This step's behavior changed in an update. Press \"Run again\" to apply it (re-running is safe).",
+    bt_none: "No devices found. Put the controller into pairing mode and scan again.",
+    bt_unnamed: "(unnamed)",
+    bt_paired: " [paired]",
+    bt_connect: "Connect",
+    bt_connected: "Connected",
+    bt_connecting: "Connecting...",
+    bt_connected_suffix: " — connected",
+    bt_connect_failed: (d) => `Connection failed: ${d}`,
+    bt_done: "The Bluetooth controller is connected.",
+    bt_scan: "Scan",
+    bt_scanning: "Scanning... (takes a few seconds)",
+    bt_found: (n) => `${n} device(s) found.`,
+    next: "Next",
+    copy: "Copy",
+    copied: "Copied",
+    copy_failed: "Copy failed",
+    pubkey_fetch_failed: (msg) => `Could not fetch the public key: ${msg}`,
+    copy_pubkey: "Copy public key",
+    connect_ok: "Connected and pushed 🎉 Your workspace is now on GitHub.",
+    connect_fail: "Could not connect.",
+    exec_details: "Execution details",
+    precheck_all_ok: "All good. Press \"Connect & push\" to finish up.",
+    guide_head: "Installed! Just a few more steps below to finish.",
+    guide_sec1: "Create a personal private repository on GitHub",
+    guide_repo_note: (repo) => `Name the repository ${repo} (worklogs and memory hold internal details, so make sure it is private).`,
+    guide_repo_options: "On the create page, tick \"Add a README file\". Apache License 2.0 is the recommended license (same as the CubePetit repositories). Both get merged in by step 3.",
+    guide_sec2: "Register this public key on GitHub",
+    guide_mask_note: "Part of the key is hidden on screen. \"Copy\" puts the full key on your clipboard.",
+    guide_pubkey_missing: (path) => `Could not read the public key. Run cat ${path} in a terminal and register its contents.`,
+    guide_sec3: "Connect the workspace to GitHub",
+    guide_connect_help: "Enter your GitHub account (or organization) name and press \"Connect & push\" — the connection and the first push happen automatically.",
+    guide_url_preview: (acc, repo) => `Target: git@github.com:${acc}/${repo}.git`,
+    guide_account_placeholder_token: "<account>",
+    gate_hint: "Press \"Check\" first",
+    gate_note: "Press \"Check\" first (all three items must pass before you can push).",
+    check_btn: "Check",
+    checking: "Checking...",
+    connect_btn: "Connect & push",
+    connecting: "Connecting...",
+    manual_fallback: "Do it manually (copy & paste in a terminal)",
+    guide_sec4: "Start Claude Code and log in",
+    term_btn: "Open claude in a terminal",
+    term_starting: "Starting...",
+    term_started: "Started.",
+    term_failed: "Could not start.",
+    term_failed_manual: (msg) => `Could not start: ${msg} Open a terminal yourself and run the copied command.`,
+    term_note: "* A terminal opens on the robot's own screen (if you are on a tablet, look at the robot).",
+    check_run: "Run check",
+    check_again: "Check again",
+    check_ok_badge: "✓ OK",
+    check_ng_badge: "✗ FAIL",
+    changes: "See what changed",
+    upd_release: (what, tag) => `A new release ${tag} of the ${what} is available`,
+    upd_behind: (what, n) => `The ${what} has updates (${n} commits)`,
+    upd_self_name: "setup tool",
+    upd_robot_name: "robot software",
+    upd_btn: "Update",
+    updating: "Updating...",
+    upd_latest: "Already on the latest release.",
+    upd_failed: (out) => `Update failed: ${out}`,
+    upd_failed_net: (msg) => `Update failed (network error): ${msg} — please try again.`,
+    upd_applying: "Applying the update. The server restarts automatically…",
+    upd_restarted: "Restarted. Reloading the page…",
+    upd_no_restart: "Could not confirm the automatic restart. Please re-run run.sh in a terminal.",
+    reload_page: "Reload page",
+    robot_upd_suffix: ". Press \"Update robot software\" to pull and rebuild.",
+    robot_upd_btn: "Update robot software",
+    installed_hint: "✓ Already installed (tick the box to reinstall)",
+    report_title: "Report a problem",
+    report_symptom_label: "What went wrong? (required — the first line becomes the title)",
+    report_symptom_placeholder: "e.g. Running step 7 (Device setup) fails at the speaker configuration",
+    report_diag_label: "Diagnostics attached automatically (editable — check for anything personal)",
+    report_loading: "Loading...",
+    report_diag_failed: "(could not fetch diagnostics)",
+    report_note: "\"Report on GitHub\" needs a free GitHub account; review the pre-filled issue before submitting. Without GitHub, use \"Copy contents\" and paste into an email.",
+    report_gh_btn: "Report on GitHub",
+    report_copy_btn: "Copy contents",
+    close: "Close",
+    report_default_title: "Setup problem",
+    report_no_symptom: "(no symptom given)",
+    report_sec_symptom: "Symptom",
+    report_sec_diag: "Diagnostics",
+    report_trimmed: "(trimmed for length)",
+    notice_none: "✅ Update complete. No steps need a re-run — you're all set.",
+    notice_some: "✅ Update complete. Steps that need a re-run after this update:",
+  },
+};
+
+let LANG = (() => {
+  const saved = localStorage.getItem("cps_lang");
+  if (saved === "ja" || saved === "en") return saved;
+  return (navigator.language || "ja").toLowerCase().startsWith("ja") ? "ja" : "en";
+})();
+
+function t(key, ...args) {
+  let v = (STR[LANG] || STR.ja)[key];
+  if (v === undefined) v = STR.ja[key];
+  return typeof v === "function" ? v(...args) : v;
+}
+
+// steps.yaml fields: pick <base>_en / <base>_ja by language, _ja fallback.
+function L(obj, base) {
+  if (!obj) return "";
+  if (LANG === "en" && obj[base + "_en"]) return obj[base + "_en"];
+  return obj[base + "_ja"] ?? obj[base + "_en"] ?? "";
+}
+
+// Server-produced dual-language messages ({message, message_en} etc.).
+function pickMsg(obj, base = "message") {
+  if (!obj) return "";
+  if (LANG === "en" && obj[base + "_en"]) return obj[base + "_en"];
+  return obj[base] ?? "";
+}
+
+function linkUrl(link) {
+  return (LANG === "en" && link.url_en) || link.url;
+}
+
+function applyStaticTexts() {
+  document.documentElement.lang = LANG;
+  document.title = t("app_title");
+  document.getElementById("app-title").textContent = t("app_title");
+  document.getElementById("mock-badge").textContent = t("mock_badge");
+  document.getElementById("report-button").textContent = t("report_btn");
+  const ph = document.getElementById("placeholder-text");
+  if (ph) ph.textContent = t("placeholder");
+  const toggle = document.getElementById("lang-toggle");
+  toggle.textContent = LANG === "ja" ? "EN" : "日本語";
+}
+
+function setLang(l) {
+  LANG = l;
+  localStorage.setItem("cps_lang", l);
+  applyStaticTexts();
+  if (state.data) {
+    renderStepList();
+    if (state.selectedId) renderDetail(state.selectedId);
+  }
+  renderUpdateBanner();
+  const pu = document.getElementById("post-update-notice");
+  if (pu && !pu.hidden) renderPostUpdateNotice();
+}
+
 async function api(path, opts = {}) {
   const res = await fetch(path, {
     method: opts.method || "GET",
@@ -68,17 +349,17 @@ function statusIcon(status) {
 function statusLabel(status, exitCode) {
   switch (status) {
     case "done":
-      return "完了しました";
+      return t("status_done");
     case "running":
-      return "実行中...";
+      return t("status_running");
     case "failed":
       return exitCode === null || exitCode === undefined
-        ? "中断されました(サーバーが途中で終了しました)。もう一度実行してください。"
-        : `失敗しました (終了コード: ${exitCode})`;
+        ? t("status_interrupted")
+        : t("status_failed", exitCode);
     case "skipped":
-      return "スキップしました";
+      return t("status_skipped");
     default:
-      return "未実行";
+      return t("status_pending");
   }
 }
 
@@ -96,7 +377,7 @@ function updateProgress() {
   document.getElementById("progress-fill").style.width = pct + "%";
   // Keep the petit visually on the track at both extremes.
   document.getElementById("progress-petit").style.left = Math.min(97, Math.max(2, petitPct)) + "%";
-  document.getElementById("progress-text").textContent = `${finished} / ${total} ステップ`;
+  document.getElementById("progress-text").textContent = t("progress_steps", finished, total);
 }
 
 function renderStepList() {
@@ -111,8 +392,8 @@ function renderStepList() {
     if (!isUnlocked(idx)) btn.classList.add("locked");
     btn.innerHTML =
       `<span class="step-icon">${statusIcon(s.status)}</span>` +
-      `<span class="step-title">${s.title_ja}</span>` +
-      (s.needs_rerun ? '<span class="step-badge">更新あり</span>' : "");
+      `<span class="step-title">${L(s, "title")}</span>` +
+      (s.needs_rerun ? `<span class="step-badge">${t("badge_update")}</span>` : "");
     btn.addEventListener("click", () => selectStep(s.id));
     nav.appendChild(btn);
   });
@@ -151,7 +432,7 @@ function buildLogPanel() {
   const details = document.createElement("details");
   details.className = "log-panel";
   const summary = document.createElement("summary");
-  summary.textContent = "実行ログ";
+  summary.textContent = t("log_panel");
   const pre = document.createElement("div");
   pre.className = "log-output";
   details.appendChild(summary);
@@ -186,7 +467,7 @@ function attachStream(runKey, stepId, opts = {}) {
   let flushTimer = null;
   const flush = () => {
     flushTimer = null;
-    const head = truncated > 0 ? `(先頭 ${truncated} 行は省略)\n` : "";
+    const head = truncated > 0 ? t("log_truncated", truncated) + "\n" : "";
     pre.textContent = head + lines.join("\n") + (lines.length ? "\n" : "");
     pre.scrollTop = pre.scrollHeight;
   };
@@ -240,13 +521,13 @@ function renderPrecheck(stepId, precheck, container) {
   box.className = "precheck-box";
 
   const msg = document.createElement("p");
-  msg.textContent = precheck.message_ja;
+  msg.textContent = L(precheck, "message");
   box.appendChild(msg);
 
   const ul = document.createElement("ul");
   (precheck.existing || []).forEach((p) => {
     const li = document.createElement("li");
-    li.textContent = p.label_ja;
+    li.textContent = L(p, "label");
     ul.appendChild(li);
   });
   box.appendChild(ul);
@@ -254,7 +535,7 @@ function renderPrecheck(stepId, precheck, container) {
   const choicesDiv = document.createElement("div");
   choicesDiv.className = "choices";
   precheck.choices.forEach((choice) => {
-    const btn = mkButton(choice.id === "clean" ? "danger" : "secondary", choice.label_ja, async () => {
+    const btn = mkButton(choice.id === "clean" ? "danger" : "secondary", L(choice, "label"), async () => {
       try {
         const res = await api(`/api/steps/${stepId}/precheck/resolve`, {
           method: "POST",
@@ -271,7 +552,7 @@ function renderPrecheck(stepId, precheck, container) {
           await loadState();
         }
       } catch (err) {
-        alert("エラー: " + err.message);
+        alert(t("error", err.message));
       }
     });
     choicesDiv.appendChild(btn);
@@ -298,7 +579,7 @@ function renderBtDeviceList(container, devices, stepId) {
   if (!devices.length) {
     const p = document.createElement("p");
     p.className = "help";
-    p.textContent = "デバイスが見つかりませんでした。コントローラをペアリングモードにしてから、もう一度スキャンしてください。";
+    p.textContent = t("bt_none");
     container.appendChild(p);
     return;
   }
@@ -310,28 +591,28 @@ function renderBtDeviceList(container, devices, stepId) {
 
     const info = document.createElement("span");
     info.className = "bt-device-info";
-    info.textContent = `${dev.name || "(名称不明)"} (${dev.mac})` + (dev.paired ? " [ペア済み]" : "");
+    info.textContent = `${dev.name || t("bt_unnamed")} (${dev.mac})` + (dev.paired ? t("bt_paired") : "");
     li.appendChild(info);
 
-    const btn = mkButton("primary", dev.connected ? "接続済み" : "接続", async () => {
+    const btn = mkButton("primary", dev.connected ? t("bt_connected") : t("bt_connect"), async () => {
       btn.disabled = true;
-      btn.textContent = "接続中...";
+      btn.textContent = t("bt_connecting");
       try {
         const res = await api("/api/bluetooth/connect", { method: "POST", body: { mac: dev.mac } });
         if (res.ok) {
-          btn.textContent = "接続済み";
-          info.textContent += " — 接続しました";
+          btn.textContent = t("bt_connected");
+          info.textContent += t("bt_connected_suffix");
           await api(`/api/steps/${stepId}/complete`, { method: "POST" });
           await loadState();
         } else {
           btn.disabled = false;
-          btn.textContent = "接続";
-          alert("接続に失敗しました: " + (res.detail || ""));
+          btn.textContent = t("bt_connect");
+          alert(t("bt_connect_failed", res.detail || ""));
         }
       } catch (err) {
         btn.disabled = false;
-        btn.textContent = "接続";
-        alert("エラー: " + err.message);
+        btn.textContent = t("bt_connect");
+        alert(t("error", err.message));
       }
     });
     btn.disabled = !!dev.connected;
@@ -356,10 +637,10 @@ function renderBluetoothStep(id, step, el, actions) {
     // "next" button, since re-scanning/re-connecting is still possible below.
     const doneBox = document.createElement("div");
     doneBox.className = "bt-done-box";
-    doneBox.textContent = "Bluetoothコントローラの接続が完了しました。";
+    doneBox.textContent = t("bt_done");
     el.appendChild(doneBox);
 
-    const nextBtn = mkButton("primary", "次へ", () => goToNextStep(id));
+    const nextBtn = mkButton("primary", t("next"), () => goToNextStep(id));
     actions.appendChild(nextBtn);
   }
 
@@ -371,15 +652,15 @@ function renderBluetoothStep(id, step, el, actions) {
   deviceBox.className = "bt-devices";
   el.appendChild(deviceBox);
 
-  const scanBtn = mkButton("primary", "スキャン", async () => {
+  const scanBtn = mkButton("primary", t("bt_scan"), async () => {
     scanBtn.disabled = true;
-    scanStatus.textContent = "スキャン中...(数秒かかります)";
+    scanStatus.textContent = t("bt_scanning");
     try {
       const res = await api("/api/bluetooth/scan", { method: "POST" });
       renderBtDeviceList(deviceBox, res.devices, id);
-      scanStatus.textContent = `${res.devices.length}件のデバイスが見つかりました。`;
+      scanStatus.textContent = t("bt_found", res.devices.length);
     } catch (err) {
-      scanStatus.textContent = "エラー: " + err.message;
+      scanStatus.textContent = t("error", err.message);
     } finally {
       scanBtn.disabled = false;
     }
@@ -387,7 +668,7 @@ function renderBluetoothStep(id, step, el, actions) {
   actions.appendChild(scanBtn);
 
   if (step.skippable && step.status !== "done") {
-    const skipBtn = mkButton("secondary", "スキップ", async () => {
+    const skipBtn = mkButton("secondary", t("skip"), async () => {
       await api(`/api/steps/${id}/skip`, { method: "POST" });
       await loadState();
     });
@@ -433,7 +714,7 @@ async function copyText(text, btn) {
     ta.remove();
   }
   const orig = btn.textContent;
-  btn.textContent = ok ? "コピーしました" : "コピーできませんでした";
+  btn.textContent = ok ? t("copied") : t("copy_failed");
   btn.disabled = true;
   setTimeout(() => {
     btn.textContent = orig;
@@ -442,14 +723,14 @@ async function copyText(text, btn) {
 }
 
 function copyButton(text) {
-  const btn = mkButton("primary copy-btn", "コピー", () => copyText(text, btn));
+  const btn = mkButton("primary copy-btn", t("copy"), () => copyText(text, btn));
   return btn;
 }
 
 function linkButton(link) {
   if (!link || !link.url) return null;
-  const btn = mkButton("secondary link-btn", `${link.label_ja} ↗`, () => {
-    window.open(link.url, "_blank", "noopener");
+  const btn = mkButton("secondary link-btn", `${L(link, "label")} ↗`, () => {
+    window.open(linkUrl(link), "_blank", "noopener");
   });
   return btn;
 }
@@ -486,12 +767,12 @@ function codeRow(container, labelText, command) {
 function sshRecoveryActions(id, links) {
   const row = document.createElement("div");
   row.className = "guide-links ssh-recovery";
-  const keyBtn = mkButton("primary copy-btn", "公開鍵をコピー", async () => {
+  const keyBtn = mkButton("primary copy-btn", t("copy_pubkey"), async () => {
     try {
       const r = await api(`/api/steps/${id}/pubkey`);
       await copyText(r.pubkey, keyBtn);
     } catch (err) {
-      alert("公開鍵を取得できませんでした: " + err.message);
+      alert(t("pubkey_fetch_failed", err.message));
     }
   });
   row.appendChild(keyBtn);
@@ -504,9 +785,10 @@ function renderConnectResult(container, r, id, links) {
   container.innerHTML = "";
   const box = document.createElement("div");
   box.className = "connect-status " + (r.ok ? "ok" : "fail");
+  const hint = pickMsg(r, "hint");
   box.textContent = r.ok
-    ? "接続してpushしました 🎉 GitHub側にワークスペースが入っています。"
-    : "接続できませんでした。" + (r.hint ? " " + r.hint : "");
+    ? t("connect_ok")
+    : t("connect_fail") + (hint ? " " + hint : "");
   if (!r.ok && r.ssh_issue) {
     box.appendChild(sshRecoveryActions(id, links));
   }
@@ -515,7 +797,7 @@ function renderConnectResult(container, r, id, links) {
     const details = document.createElement("details");
     if (!r.ok) details.open = true;
     const summary = document.createElement("summary");
-    summary.textContent = "実行内容の詳細";
+    summary.textContent = t("exec_details");
     details.appendChild(summary);
     const pre = document.createElement("div");
     pre.className = "log-output";
@@ -539,7 +821,7 @@ function renderPrecheckRepoResult(container, res, id, links) {
     li.appendChild(mark);
     const label = document.createElement("span");
     label.className = "check-label";
-    label.textContent = item.message;
+    label.textContent = pickMsg(item);
     li.appendChild(label);
     if (item.ssh_issue) {
       li.appendChild(sshRecoveryActions(id, links));
@@ -550,7 +832,7 @@ function renderPrecheckRepoResult(container, res, id, links) {
   if (res.all_ok) {
     const p = document.createElement("p");
     p.className = "help precheck-all-ok";
-    p.textContent = "すべてOKです。「接続して送信」で仕上げてください。";
+    p.textContent = t("precheck_all_ok");
     container.appendChild(p);
   }
 }
@@ -574,7 +856,7 @@ async function renderClaudeSupportPanel(id, step, el) {
 
   const head = document.createElement("p");
   head.className = "guide-head";
-  head.textContent = "導入できました!あと少し、下の手順で仕上げてください。";
+  head.textContent = t("guide_head");
   box.appendChild(head);
 
   const introLinks = document.createElement("div");
@@ -585,23 +867,21 @@ async function renderClaudeSupportPanel(id, step, el) {
   box.appendChild(introLinks);
 
   // 1. create the private repository
-  const sec1 = guideSection(1, "GitHubで個人の「privateリポジトリ」を作成");
+  const sec1 = guideSection(1, t("guide_sec1"));
   const repoNote = document.createElement("p");
   repoNote.className = "help";
-  repoNote.textContent =
-    `リポジトリ名は ${res.repo_suggestion} にしてください(作業ログや記憶に内部情報が入るので、必ず private にしてください)`;
+  repoNote.textContent = t("guide_repo_note", res.repo_suggestion);
   sec1.appendChild(repoNote);
   const repoOptions = document.createElement("p");
   repoOptions.className = "help";
-  repoOptions.textContent =
-    "作成画面では「Add a README file」にチェックを入れてください。License は Apache License 2.0 を選ぶのがおすすめです(CubePetit系リポジトリと同じ)。どちらも手順3の接続がそのまま取り込みます。";
+  repoOptions.textContent = t("guide_repo_options");
   sec1.appendChild(repoOptions);
   const b1 = linkButton(links.new_repo);
   if (b1) sec1.appendChild(b1);
   box.appendChild(sec1);
 
   // 2. register the public key (masked on screen; copy fetches the full key)
-  const sec2 = guideSection(2, "この公開鍵をGitHubに登録");
+  const sec2 = guideSection(2, t("guide_sec2"));
   if (res.pubkey_masked) {
     const row = document.createElement("div");
     row.className = "code-row";
@@ -609,24 +889,24 @@ async function renderClaudeSupportPanel(id, step, el) {
     code.className = "code-box pubkey";
     code.textContent = res.pubkey_masked;
     row.appendChild(code);
-    const keyBtn = mkButton("primary copy-btn", "コピー", async () => {
+    const keyBtn = mkButton("primary copy-btn", t("copy"), async () => {
       try {
         const r = await api(`/api/steps/${id}/pubkey`);
         await copyText(r.pubkey, keyBtn);
       } catch (err) {
-        alert("公開鍵を取得できませんでした: " + err.message);
+        alert(t("pubkey_fetch_failed", err.message));
       }
     });
     row.appendChild(keyBtn);
     sec2.appendChild(row);
     const note = document.createElement("p");
     note.className = "help";
-    note.textContent = "画面では一部を伏せています。「コピー」を押すと全文がクリップボードに入ります。";
+    note.textContent = t("guide_mask_note");
     sec2.appendChild(note);
   } else {
     const p = document.createElement("p");
     p.className = "help";
-    p.textContent = `公開鍵を読み取れませんでした。ターミナルで cat ${res.pubkey_path || "~/.ssh/id_ed25519.pub"} を実行して内容を登録してください。`;
+    p.textContent = t("guide_pubkey_missing", res.pubkey_path || "~/.ssh/id_ed25519.pub");
     sec2.appendChild(p);
   }
   const b2 = linkButton(links.ssh_keys);
@@ -634,10 +914,10 @@ async function renderClaudeSupportPanel(id, step, el) {
   box.appendChild(sec2);
 
   // 3. connect the workspace to the repository (one button; manual fallback)
-  const sec3 = guideSection(3, "ワークスペースをGitHubにつなぐ");
+  const sec3 = guideSection(3, t("guide_sec3"));
   const connectHelp = document.createElement("p");
   connectHelp.className = "help";
-  connectHelp.textContent = "GitHubアカウント名(またはOrganization名)を入れて「接続して送信」を押すと、接続と最初のpushまで自動で行います。";
+  connectHelp.textContent = t("guide_connect_help");
   sec3.appendChild(connectHelp);
 
   const connectRow = document.createElement("div");
@@ -655,8 +935,8 @@ async function renderClaudeSupportPanel(id, step, el) {
   const urlPreview = document.createElement("p");
   urlPreview.className = "help url-preview";
   const updatePreview = () => {
-    const acc = accountInput.value.trim() || "<アカウント名>";
-    urlPreview.textContent = `接続先: git@github.com:${acc}/${res.repo_suggestion}.git`;
+    const acc = accountInput.value.trim() || t("guide_account_placeholder_token");
+    urlPreview.textContent = t("guide_url_preview", acc, res.repo_suggestion);
   };
   updatePreview();
   accountInput.addEventListener("input", () => {
@@ -672,25 +952,24 @@ async function renderClaudeSupportPanel(id, step, el) {
   // The connect button stays disabled until a pre-connect check has passed
   // all three items; editing the account re-requires a check.
   let precheckPassed = false;
-  const GATE_HINT = "先に「チェック」を押してください";
   const gateNote = document.createElement("p");
   gateNote.className = "help gate-note";
-  gateNote.textContent = "先に「チェック」を押してください(3項目すべてOKになると送信できます)。";
+  gateNote.textContent = t("gate_note");
 
   const applyGate = () => {
     connectBtn.disabled = !precheckPassed;
-    connectBtn.title = precheckPassed ? "" : GATE_HINT;
+    connectBtn.title = precheckPassed ? "" : t("gate_hint");
     gateNote.hidden = precheckPassed;
   };
 
-  const checkBtn = mkButton("secondary", "チェック", async () => {
+  const checkBtn = mkButton("secondary", t("check_btn"), async () => {
     checkBtn.disabled = true;
-    checkBtn.textContent = "確認中...";
+    checkBtn.textContent = t("checking");
     precheckStatus.innerHTML = "";
     try {
       const r = await api(`/api/steps/${id}/precheck_repo`, {
         method: "POST",
-        body: { account: accountInput.value },
+        body: { account: accountInput.value, lang: LANG },
       });
       renderPrecheckRepoResult(precheckStatus, r, id, links);
       precheckPassed = !!r.all_ok;
@@ -699,27 +978,27 @@ async function renderClaudeSupportPanel(id, step, el) {
       precheckPassed = false;
     } finally {
       checkBtn.disabled = false;
-      checkBtn.textContent = "チェック";
+      checkBtn.textContent = t("check_btn");
       applyGate();
     }
   });
   connectRow.appendChild(checkBtn);
 
-  const connectBtn = mkButton("primary", "接続して送信", async () => {
+  const connectBtn = mkButton("primary", t("connect_btn"), async () => {
     connectBtn.disabled = true;
-    connectBtn.textContent = "接続中...";
+    connectBtn.textContent = t("connecting");
     connectStatus.innerHTML = "";
     try {
       const r = await api(`/api/steps/${id}/connect_repo`, {
         method: "POST",
-        body: { account: accountInput.value },
+        body: { account: accountInput.value, lang: LANG },
       });
       renderConnectResult(connectStatus, r, id, links);
     } catch (err) {
       renderConnectResult(connectStatus, { ok: false, output: "", hint: err.message }, id, links);
     } finally {
       connectBtn.disabled = false;
-      connectBtn.textContent = "接続して送信";
+      connectBtn.textContent = t("connect_btn");
     }
   });
   connectRow.appendChild(connectBtn);
@@ -733,27 +1012,27 @@ async function renderClaudeSupportPanel(id, step, el) {
   const manual = document.createElement("details");
   manual.className = "manual-fallback";
   const manualSummary = document.createElement("summary");
-  manualSummary.textContent = "手動でやる場合(ターミナルでコピー&ペースト)";
+  manualSummary.textContent = t("manual_fallback");
   manual.appendChild(manualSummary);
-  (res.connect_commands || []).forEach((c) => codeRow(manual, c.label_ja, c.command));
+  (res.connect_commands || []).forEach((c) => codeRow(manual, L(c, "label"), c.command));
   sec3.appendChild(manual);
   box.appendChild(sec3);
 
   // 4. first login: one-click terminal on the robot's screen, with the
   // copy-paste command kept as the manual alternative
-  const sec4 = guideSection(4, "Claude Codeを起動して初回ログイン");
+  const sec4 = guideSection(4, t("guide_sec4"));
   const termStatus = document.createElement("p");
   termStatus.className = "help";
-  const termBtn = mkButton("primary", "claudeをターミナルで起動", async () => {
+  const termBtn = mkButton("primary", t("term_btn"), async () => {
     termBtn.disabled = true;
     termStatus.classList.remove("term-fail");
-    termStatus.textContent = "起動中...";
+    termStatus.textContent = t("term_starting");
     try {
-      const r = await api(`/api/steps/${id}/open_terminal`, { method: "POST", body: {} });
-      termStatus.textContent = r.message || (r.ok ? "起動しました。" : "起動できませんでした。");
+      const r = await api(`/api/steps/${id}/open_terminal`, { method: "POST", body: { lang: LANG } });
+      termStatus.textContent = pickMsg(r) || (r.ok ? t("term_started") : t("term_failed"));
       termStatus.classList.toggle("term-fail", !r.ok);
     } catch (err) {
-      termStatus.textContent = "起動できませんでした: " + err.message + " 手動でターミナルを開いて、コピーしたコマンドを実行してください。";
+      termStatus.textContent = t("term_failed_manual", err.message);
       termStatus.classList.add("term-fail");
     } finally {
       termBtn.disabled = false;
@@ -765,17 +1044,17 @@ async function renderClaudeSupportPanel(id, step, el) {
   sec4.appendChild(termRow);
   const termNote = document.createElement("p");
   termNote.className = "help";
-  termNote.textContent = "※この機体の画面にターミナルが開きます(タブレットから操作している場合は機体の画面を見てください)。";
+  termNote.textContent = t("term_note");
   sec4.appendChild(termNote);
   sec4.appendChild(termStatus);
   if (res.login_command) {
-    codeRow(sec4, res.login_command.label_ja, res.login_command.command);
+    codeRow(sec4, L(res.login_command, "label"), res.login_command.command);
   }
   box.appendChild(sec4);
 
   const actions = document.createElement("div");
   actions.className = "actions";
-  actions.appendChild(mkButton("primary", "次へ", () => goToNextStep(id)));
+  actions.appendChild(mkButton("primary", t("next"), () => goToNextStep(id)));
   box.appendChild(actions);
 
   el.appendChild(box);
@@ -788,18 +1067,21 @@ function checkItemEl(item) {
   li.className = "check-item " + (item.ok ? "ok" : "ng");
   const mark = document.createElement("span");
   mark.className = "check-mark check-badge";
-  mark.textContent = item.ok ? "✓ 成功" : "✗ 失敗";
+  mark.textContent = item.ok ? t("check_ok_badge") : t("check_ng_badge");
   li.appendChild(mark);
   const label = document.createElement("span");
   label.className = "check-label";
-  // Translated form ("IMU(姿勢センサ): データがきています…") when the server
-  // recognized the line; raw English text as a fallback for unknown lines.
-  label.textContent = item.label_ja ? `${item.label_ja}: ${item.message_ja}` : item.label;
+  // Japanese: translated form ("IMU(姿勢センサ): データがきています…") when the
+  // server recognized the line, raw text as fallback. English: the check
+  // script's own output is already English, so show it as-is.
+  const translated = LANG !== "en" && item.label_ja;
+  label.textContent = translated ? `${item.label_ja}: ${item.message_ja}` : item.label;
   li.appendChild(label);
-  if (!item.ok && item.detail) {
+  const detail = LANG === "en" ? item.detail_en : item.detail;
+  if (!item.ok && detail) {
     const hint = document.createElement("div");
     hint.className = "check-hint";
-    hint.textContent = item.detail;
+    hint.textContent = detail;
     li.appendChild(hint);
   }
   return li;
@@ -833,13 +1115,13 @@ function renderCheckStep(id, step, el, actions, running) {
   resultBox.className = "check-result";
   el.appendChild(resultBox);
 
-  const runBtn = mkButton("primary", step.status === "pending" ? "チェック実行" : "もう一度チェック", async () => {
+  const runBtn = mkButton("primary", step.status === "pending" ? t("check_run") : t("check_again"), async () => {
     runBtn.disabled = true;
     try {
       await api(`/api/steps/${id}/run`, { method: "POST" });
       await loadState();
     } catch (err) {
-      alert("エラー: " + err.message);
+      alert(t("error", err.message));
     }
   });
   runBtn.disabled = running;
@@ -856,7 +1138,7 @@ function changeList(status) {
   const lines = (status.notes && status.notes.length) ? status.notes : (status.commits || []);
   const details = document.createElement("details");
   const summary = document.createElement("summary");
-  summary.textContent = "変更内容を見る";
+  summary.textContent = t("changes");
   details.appendChild(summary);
   const ul = document.createElement("ul");
   ul.className = "update-commits";
@@ -869,10 +1151,11 @@ function changeList(status) {
   return details;
 }
 
-function updateHeadline(prefix, status) {
+function updateHeadline(whatKey, status) {
+  const what = t(whatKey);
   return status.tag
-    ? `${prefix}に新しいリリース ${status.tag} があります`
-    : `${prefix}に更新があります(${status.behind}件)`;
+    ? t("upd_release", what, status.tag)
+    : t("upd_behind", what, status.behind);
 }
 
 async function loadUpdates() {
@@ -899,7 +1182,7 @@ function renderUpdateBanner() {
 
   const text = document.createElement("span");
   text.className = "update-banner-text";
-  text.textContent = updateHeadline("セットアップツール", self);
+  text.textContent = updateHeadline("upd_self_name", self);
   banner.appendChild(text);
 
   banner.appendChild(changeList(self));
@@ -907,9 +1190,9 @@ function renderUpdateBanner() {
   const status = document.createElement("span");
   status.className = "update-banner-status";
 
-  const btn = mkButton("primary", "アップデート", async () => {
+  const btn = mkButton("primary", t("upd_btn"), async () => {
     btn.disabled = true;
-    status.textContent = "更新中...";
+    status.textContent = t("updating");
     try {
       // Time-box the request: the server may exit for its restart while this
       // request is in flight, and a fetch left pending forever would strand
@@ -926,10 +1209,10 @@ function renderUpdateBanner() {
         btn.remove();
         await waitForRestart(status);
       } else if (r.ok) {
-        status.textContent = r.output || "すでに最新のリリースです。";
+        status.textContent = pickMsg(r, "output") || t("upd_latest");
         btn.remove();
       } else {
-        status.textContent = "更新できませんでした: " + (r.output || "");
+        status.textContent = t("upd_failed", pickMsg(r, "output") || "");
         btn.disabled = false;
       }
     } catch (err) {
@@ -942,8 +1225,7 @@ function renderUpdateBanner() {
         btn.remove();
         await waitForRestart(status);
       } else {
-        status.textContent =
-          "更新できませんでした(通信エラー): " + err.message + " — もう一度お試しください。";
+        status.textContent = t("upd_failed_net", err.message);
         btn.disabled = false;
       }
     }
@@ -955,13 +1237,13 @@ function renderUpdateBanner() {
 // After a self-update the server exits and run.sh's supervisor loop starts
 // it again on the new code. Wait out the gap, then reload onto the new UI.
 async function waitForRestart(status) {
-  status.textContent = "アップデートを適用しています。自動で再起動します…";
+  status.textContent = t("upd_applying");
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(3000); // let the old server actually exit first
   for (let i = 0; i < 60; i++) {
     try {
       await api("/api/state");
-      status.textContent = "再起動しました。画面を読み込み直します…";
+      status.textContent = t("upd_restarted");
       // Survives the reload below: init() sees it and shows the
       // "which steps need a re-run" summary on the new version.
       sessionStorage.setItem("cps_just_updated", "1");
@@ -972,10 +1254,9 @@ async function waitForRestart(status) {
     }
     await sleep(1000);
   }
-  status.textContent =
-    "自動再起動を確認できませんでした。ターミナルで run.sh を手動で起動し直してください。";
+  status.textContent = t("upd_no_restart");
   // Escape hatch: never leave the user without a clickable way forward.
-  const reloadBtn = mkButton("secondary", "ページを再読み込み", () => location.reload());
+  const reloadBtn = mkButton("secondary", t("reload_page"), () => location.reload());
   status.insertAdjacentElement("afterend", reloadBtn);
 }
 
@@ -987,13 +1268,11 @@ function renderRobotUpdate(id, el, actions) {
 
   const box = document.createElement("div");
   box.className = "warning-box";
-  box.textContent =
-    updateHeadline("ロボットのソフトウェア", robot) +
-    "。「ロボットソフトをアップデート」を押すと、取得して再ビルドします。";
+  box.textContent = updateHeadline("upd_robot_name", robot) + t("robot_upd_suffix");
   box.appendChild(changeList(robot));
   el.insertBefore(box, actions);
 
-  const btn = mkButton("primary", "ロボットソフトをアップデート", async () => {
+  const btn = mkButton("primary", t("robot_upd_btn"), async () => {
     btn.disabled = true;
     try {
       const res = await api("/api/updates/robot", { method: "POST" });
@@ -1001,7 +1280,7 @@ function renderRobotUpdate(id, el, actions) {
       attachStream(res.run_key, id, { reloadOnEnd: true });
     } catch (err) {
       btn.disabled = false;
-      alert("エラー: " + err.message);
+      alert(t("error", err.message));
     }
   });
   actions.appendChild(btn);
@@ -1023,7 +1302,7 @@ function applyInstalledInfo(id, boolRows) {
         row.input.checked = false;
         const hint = document.createElement("div");
         hint.className = "help bool-help installed-hint";
-        hint.textContent = "✓ インストール済みです(もう一度入れ直す場合はチェックしてください)";
+        hint.textContent = t("installed_hint");
         row.row.appendChild(hint);
       });
     })
@@ -1045,21 +1324,22 @@ function buildCelebrationPanel() {
 
   const title = document.createElement("h2");
   title.className = "celebration-title";
-  title.textContent = completion.title_ja || "🎉 セットアップ完了です!";
+  title.textContent = L(completion, "title") || "🎉";
   box.appendChild(title);
 
-  if (completion.subtitle_ja) {
+  const subtitle_text = L(completion, "subtitle");
+  if (subtitle_text) {
     const subtitle = document.createElement("p");
     subtitle.className = "celebration-subtitle";
-    subtitle.textContent = completion.subtitle_ja;
+    subtitle.textContent = subtitle_text;
     box.appendChild(subtitle);
   }
 
   const actionsWrap = document.createElement("div");
   actionsWrap.className = "celebration-actions";
   (completion.next_actions || []).forEach((action) => {
-    const btn = mkButton("primary", action.label_ja, () => {
-      if (action.url) window.open(action.url, "_blank", "noopener");
+    const btn = mkButton("primary", L(action, "label"), () => {
+      if (action.url) window.open(linkUrl(action), "_blank", "noopener");
     });
     actionsWrap.appendChild(btn);
   });
@@ -1074,18 +1354,18 @@ function renderDetail(id) {
   el.innerHTML = "";
 
   const h2 = document.createElement("h2");
-  h2.textContent = step.title_ja;
+  h2.textContent = L(step, "title");
   el.appendChild(h2);
 
   const desc = document.createElement("p");
   desc.className = "description";
-  desc.textContent = step.description_ja;
+  desc.textContent = L(step, "description");
   el.appendChild(desc);
 
-  if (step.warning_ja) {
+  if (step.warning_ja || step.warning_en) {
     const w = document.createElement("div");
     w.className = "warning-box";
-    w.textContent = step.warning_ja;
+    w.textContent = L(step, "warning");
     el.appendChild(w);
   }
 
@@ -1097,8 +1377,7 @@ function renderDetail(id) {
   if (step.needs_rerun) {
     const rerunNote = document.createElement("div");
     rerunNote.className = "warning-box";
-    rerunNote.textContent =
-      "このステップの処理内容がアップデートで変わっています。「もう一度実行」で反映してください(再実行しても安全です)。";
+    rerunNote.textContent = t("rerun_note");
     el.appendChild(rerunNote);
   }
 
@@ -1109,7 +1388,7 @@ function renderDetail(id) {
     const row = document.createElement("div");
     row.className = "input-row" + (inputDef.type === "bool" ? " bool" : "");
     const label = document.createElement("label");
-    label.textContent = inputDef.label_ja;
+    label.textContent = L(inputDef, "label");
 
     if (inputDef.type === "bool") {
       const input = document.createElement("input");
@@ -1117,10 +1396,10 @@ function renderDetail(id) {
       input.checked = savedInputs[inputDef.id] ?? inputDef.default ?? false;
       row.appendChild(input);
       row.appendChild(label);
-      if (inputDef.help_ja) {
+      if (inputDef.help_ja || inputDef.help_en) {
         const help = document.createElement("div");
         help.className = "help bool-help";
-        help.textContent = inputDef.help_ja;
+        help.textContent = L(inputDef, "help");
         row.appendChild(help);
       }
       if (inputDef.detect_cmd) boolRows[inputDef.id] = { row, input };
@@ -1132,10 +1411,10 @@ function renderDetail(id) {
       input.placeholder = inputDef.placeholder || "";
       input.value = savedInputs[inputDef.id] ?? inputDef.default ?? "";
       row.appendChild(input);
-      if (inputDef.help_ja) {
+      if (inputDef.help_ja || inputDef.help_en) {
         const help = document.createElement("div");
         help.className = "help";
-        help.textContent = inputDef.help_ja;
+        help.textContent = L(inputDef, "help");
         row.appendChild(help);
       }
       formGetters[inputDef.id] = () => input.value;
@@ -1158,7 +1437,7 @@ function renderDetail(id) {
   if (step.type === "reboot_gate") {
     const btn = mkButton(
       "primary",
-      "確認しました(この後、機体を再起動してください)",
+      t("reboot_ack"),
       async () => {
         await api(`/api/steps/${id}/complete`, { method: "POST" });
         await loadState();
@@ -1171,7 +1450,7 @@ function renderDetail(id) {
   } else if (step.type === "check") {
     renderCheckStep(id, step, el, actions, running);
   } else {
-    const runLabel = step.status === "failed" ? "もう一度実行" : "実行";
+    const runLabel = step.status === "failed" ? t("run_again") : t("run");
     const runBtn = mkButton("primary", runLabel, async () => {
       const inputs = {};
       Object.entries(formGetters).forEach(([k, get]) => {
@@ -1179,7 +1458,7 @@ function renderDetail(id) {
       });
       try {
         if (Object.keys(inputs).length) {
-          await api(`/api/steps/${id}/inputs`, { method: "POST", body: { inputs } });
+          await api(`/api/steps/${id}/inputs`, { method: "POST", body: { inputs, lang: LANG } });
         }
         await api(`/api/steps/${id}/run`, { method: "POST", body: { inputs } });
         await loadState();
@@ -1187,7 +1466,7 @@ function renderDetail(id) {
         if (err.status === 409 && err.payload && err.payload.detail && err.payload.detail.message === "precheck_required") {
           renderPrecheck(id, err.payload.detail.precheck, precheckContainer);
         } else {
-          alert("エラー: " + err.message);
+          alert(t("error", err.message));
         }
       }
     });
@@ -1195,7 +1474,7 @@ function renderDetail(id) {
     actions.appendChild(runBtn);
 
     if (step.skippable && step.status !== "done") {
-      const skipBtn = mkButton("secondary", "スキップ", async () => {
+      const skipBtn = mkButton("secondary", t("skip"), async () => {
         await api(`/api/steps/${id}/skip`, { method: "POST" });
         await loadState();
       });
@@ -1251,11 +1530,11 @@ const REPORT_REPO_URL = "https://github.com/sbgisen/cube_petit_setup";
 const REPORT_URL_LIMIT = 7000;
 
 function reportBody(symptom, diagnostics) {
-  return `## 症状\n\n${symptom.trim()}\n\n## 診断情報\n\n\`\`\`\n${diagnostics.trim()}\n\`\`\`\n`;
+  return `## ${t("report_sec_symptom")}\n\n${symptom.trim()}\n\n## ${t("report_sec_diag")}\n\n\`\`\`\n${diagnostics.trim()}\n\`\`\`\n`;
 }
 
 function reportIssueUrl(symptom, diagnostics) {
-  const title = (symptom.trim().split("\n")[0] || "セットアップで不具合").slice(0, 100);
+  const title = (symptom.trim().split("\n")[0] || t("report_default_title")).slice(0, 100);
   let url =
     `${REPORT_REPO_URL}/issues/new?title=${encodeURIComponent(title)}` +
     `&body=${encodeURIComponent(reportBody(symptom, diagnostics))}`;
@@ -1266,7 +1545,7 @@ function reportIssueUrl(symptom, diagnostics) {
       diag = diag.slice(0, Math.floor(diag.length * 0.8));
       url =
         `${REPORT_REPO_URL}/issues/new?title=${encodeURIComponent(title)}` +
-        `&body=${encodeURIComponent(reportBody(symptom, diag + "\n(長いため以降を省略)"))}`;
+        `&body=${encodeURIComponent(reportBody(symptom, diag + "\n" + t("report_trimmed")))}`;
     }
   }
   return url;
@@ -1282,40 +1561,38 @@ async function openReportPanel() {
   overlay.appendChild(panel);
 
   const h2 = document.createElement("h2");
-  h2.textContent = "不具合を報告";
+  h2.textContent = t("report_title");
   panel.appendChild(h2);
 
   const symptomLabel = document.createElement("label");
-  symptomLabel.textContent = "どんな不具合ですか?(必須。1行目がタイトルになります)";
+  symptomLabel.textContent = t("report_symptom_label");
   panel.appendChild(symptomLabel);
   const symptom = document.createElement("textarea");
   symptom.className = "report-symptom";
-  symptom.placeholder = "例: ステップ7のデバイス設定を実行すると、スピーカーの設定で失敗します";
+  symptom.placeholder = t("report_symptom_placeholder");
   panel.appendChild(symptom);
 
   const diagLabel = document.createElement("label");
-  diagLabel.textContent = "自動で添付される診断情報(編集できます。個人情報が無いか確認してください)";
+  diagLabel.textContent = t("report_diag_label");
   panel.appendChild(diagLabel);
   const diag = document.createElement("textarea");
   diag.className = "report-diagnostics";
-  diag.value = "読み込み中...";
+  diag.value = t("report_loading");
   panel.appendChild(diag);
   api("/api/report/draft")
     .then((r) => { diag.value = r.diagnostics || ""; })
-    .catch(() => { diag.value = "(診断情報を取得できませんでした)"; });
+    .catch(() => { diag.value = t("report_diag_failed"); });
 
   const note = document.createElement("p");
   note.className = "report-note";
-  note.textContent =
-    "「GitHubで報告する」には無料のGitHubアカウントが必要です。投稿画面で内容を確認してから送信してください。" +
-    "GitHubを使わない場合は「内容をコピー」でメール等に貼り付けられます。";
+  note.textContent = t("report_note");
   panel.appendChild(note);
 
   const actions = document.createElement("div");
   actions.className = "actions";
   panel.appendChild(actions);
 
-  const ghBtn = mkButton("primary", "GitHubで報告する", () => {
+  const ghBtn = mkButton("primary", t("report_gh_btn"), () => {
     window.open(reportIssueUrl(symptom.value, diag.value), "_blank");
   });
   ghBtn.disabled = true;
@@ -1324,12 +1601,12 @@ async function openReportPanel() {
     ghBtn.disabled = !symptom.value.trim();
   });
 
-  const copyBtn = mkButton("secondary", "内容をコピー", () => {
-    copyText(reportBody(symptom.value || "(症状未記入)", diag.value), copyBtn);
+  const copyBtn = mkButton("secondary", t("report_copy_btn"), () => {
+    copyText(reportBody(symptom.value || t("report_no_symptom"), diag.value), copyBtn);
   });
   actions.appendChild(copyBtn);
 
-  const closeBtn = mkButton("secondary", "閉じる", () => {
+  const closeBtn = mkButton("secondary", t("close"), () => {
     overlay.hidden = true;
     overlay.innerHTML = "";
   });
@@ -1350,16 +1627,15 @@ function renderPostUpdateNotice() {
   const stale = state.data.steps.filter((s) => s.needs_rerun);
   box.appendChild(title);
   if (!stale.length) {
-    title.textContent =
-      "✅ アップデート完了。再実行が必要なステップはありません。これで完了です。";
+    title.textContent = t("notice_none");
   } else {
-    title.textContent = "✅ アップデート完了。このアップデートで再実行が必要なステップ:";
+    title.textContent = t("notice_some");
     const ul = document.createElement("ul");
     stale.forEach((s) => {
       const li = document.createElement("li");
       const link = document.createElement("a");
       link.href = "#";
-      link.textContent = s.title_ja;
+      link.textContent = L(s, "title");
       link.addEventListener("click", (ev) => {
         ev.preventDefault();
         selectStep(s.id);
@@ -1370,7 +1646,7 @@ function renderPostUpdateNotice() {
     box.appendChild(ul);
   }
 
-  const close = mkButton("secondary", "閉じる", () => {
+  const close = mkButton("secondary", t("close"), () => {
     box.hidden = true;
     box.innerHTML = "";
   });
@@ -1379,6 +1655,11 @@ function renderPostUpdateNotice() {
 }
 
 async function init() {
+  applyStaticTexts();
+  document.getElementById("lang-toggle").addEventListener("click", () => {
+    setLang(LANG === "ja" ? "en" : "ja");
+  });
+
   await loadState();
   if (state.data.steps.length) {
     const firstNotDone = state.data.steps.find((s) => !["done", "skipped"].includes(s.status));

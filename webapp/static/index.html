@@ -8,8 +8,9 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>Cube Petit セットアップ</h1>
+    <h1 id="app-title">Cube Petit セットアップ</h1>
     <span id="mock-badge" class="mock-badge" hidden>MOCK モード(疑似実行)</span>
+    <button id="lang-toggle" class="lang-toggle" type="button" title="Switch language">EN</button>
     <button id="report-button" class="report-button" type="button">不具合を報告</button>
     <!-- Static link (no app.js involvement) to the fleet landing page. Inline
          style on purpose: keeps style.css untouched for parallel branches. -->
@@ -35,7 +36,7 @@
     <nav id="step-list" class="step-list" aria-label="セットアップの進み具合"></nav>
 
     <section id="step-detail" class="step-detail">
-      <p class="placeholder">左のリストからステップを選んでください。</p>
+      <p class="placeholder" id="placeholder-text">左のリストからステップを選んでください。</p>
     </section>
   </main>
 

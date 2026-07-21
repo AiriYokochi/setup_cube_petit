@@ -86,6 +86,7 @@ async def _watch_run(step_id: str, run: engine.StepRun) -> None:
 
 class InputsBody(BaseModel):
     inputs: dict = {}
+    lang: str = "ja"  # UI language for validation-error wording
 
 
 class RunBody(BaseModel):
@@ -100,6 +101,15 @@ class BluetoothConnectBody(BaseModel):
     mac: str
 
 
+class LangBody(BaseModel):
+    lang: str = "ja"
+
+
+def _pick(lang: str, ja: str, en: str) -> str:
+    """Language-dependent server message; anything but 'en' gets Japanese."""
+    return en if lang == "en" else ja
+
+
 # --- sensor connection check (step 8) log parsing ---------------------------
 #
 # udev_check.sh (shell_scripts/udev_check.sh) prints one colored "[OK] ..."
@@ -109,22 +119,39 @@ class BluetoothConnectBody(BaseModel):
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 _CHECK_ITEM_RE = re.compile(r"^\[(OK|NG)\]\s*(.+)$")
 
-_CHECK_HINTS: list[tuple[re.Pattern, str]] = [
-    (re.compile("imu", re.I), "IMUケーブルの接続を確認して、デバイス設定のIMUを実行しましたか?"),
-    (re.compile(r"can0|canable|\bcan\b", re.I), "CANケーブルの接続を確認して、デバイス設定のCANを実行しましたか?"),
-    (re.compile("lidar|ld06", re.I), "LiDARのUSB接続を確認してください。"),
-    (re.compile("wi-?fi", re.I), "Wi-Fiに接続されているか確認してください。"),
-    (re.compile("sound_blaster|audio", re.I), "SoundBlasterのUSB接続と、デバイス設定のスピーカーを確認してください。"),
-    (re.compile("realsense", re.I), "RealSenseのUSB接続と、デバイス設定のRealSenseを実行しましたか?"),
-    (re.compile("bluetooth|controller", re.I), "ステップ7でBluetoothコントローラを接続しましたか?"),
+_CHECK_HINTS: list[tuple[re.Pattern, str, str]] = [
+    (re.compile("imu", re.I),
+     "IMUケーブルの接続を確認して、デバイス設定のIMUを実行しましたか?",
+     "Check the IMU cable, and make sure the IMU item was run in Device setup."),
+    (re.compile(r"can0|canable|\bcan\b", re.I),
+     "CANケーブルの接続を確認して、デバイス設定のCANを実行しましたか?",
+     "Check the CAN cable, and make sure the CAN item was run in Device setup."),
+    (re.compile("lidar|ld06", re.I),
+     "LiDARのUSB接続を確認してください。",
+     "Check the LiDAR's USB connection."),
+    (re.compile("wi-?fi", re.I),
+     "Wi-Fiに接続されているか確認してください。",
+     "Check that the robot is connected to Wi-Fi."),
+    (re.compile("sound_blaster|audio", re.I),
+     "SoundBlasterのUSB接続と、デバイス設定のスピーカーを確認してください。",
+     "Check the SoundBlaster's USB connection and the Speaker item in Device setup."),
+    (re.compile("realsense", re.I),
+     "RealSenseのUSB接続と、デバイス設定のRealSenseを実行しましたか?",
+     "Check the RealSense's USB connection, and make sure it was run in Device setup."),
+    (re.compile("bluetooth|controller", re.I),
+     "ステップ7でBluetoothコントローラを接続しましたか?",
+     "Did you pair the Bluetooth controller in the pairing step?"),
 ]
 
+_HINT_FALLBACK = "接続を確認し、必要ならデバイス設定をやり直してください。"
+_HINT_FALLBACK_EN = "Check the connection and re-run Device setup if needed."
 
-def _hint_for(label: str) -> str:
-    for pattern, hint in _CHECK_HINTS:
+
+def _hint_for(label: str) -> tuple[str, str]:
+    for pattern, hint, hint_en in _CHECK_HINTS:
         if pattern.search(label):
-            return hint
-    return "接続を確認し、必要ならデバイス設定をやり直してください。"
+            return hint, hint_en
+    return _HINT_FALLBACK, _HINT_FALLBACK_EN
 
 
 # Japanese translation of udev_check.sh result lines. The script's own output
@@ -198,12 +225,17 @@ def _parse_check_log(raw_log: str) -> list[dict]:
         ok = m.group(1) == "OK"
         label = m.group(2).strip()
         translated = _translate_check_line(label)
+        hint_ja, hint_en = _hint_for(label)
         items.append({
+            # "label" is the check script's own (English) line: the English
+            # UI shows it as-is, so only the Japanese side needs a
+            # translation table here.
             "label": label,
             "label_ja": translated[0] if translated else None,
             "message_ja": translated[1] if translated else None,
             "ok": ok,
-            "detail": None if ok else _hint_for(label),
+            "detail": None if ok else hint_ja,
+            "detail_en": None if ok else hint_en,
         })
     return items
 
@@ -303,17 +335,23 @@ async def save_inputs(step_id: str, body: InputsBody):
     step_def = _get_step_or_404(step_id)
     input_defs = {d["id"]: d for d in step_def.get("inputs", [])}
 
+    lang = body.lang
     for key, value in body.inputs.items():
         d = input_defs.get(key)
         if not d:
             continue
+        label = (d.get("label_en") if lang == "en" else None) or d.get("label_ja", key)
         if d.get("required") and not value:
-            raise HTTPException(400, f"「{d.get('label_ja', key)}」を入力してください")
+            raise HTTPException(400, _pick(
+                lang, f"「{label}」を入力してください", f'Please fill in "{label}".'))
         if d.get("type") == "text" and d.get("pattern") and value:
             if not re.match(d["pattern"], str(value)):
+                err = (d.get("error_en") if lang == "en" else None) or d.get("error_ja")
                 raise HTTPException(
                     400,
-                    d.get("error_ja") or f"「{d.get('label_ja', key)}」の形式が正しくありません",
+                    err or _pick(lang,
+                                 f"「{label}」の形式が正しくありません",
+                                 f'"{label}" is not in the expected format.'),
                 )
 
     state = state_mod.load_state()
@@ -511,15 +549,18 @@ def _claude_support_result() -> dict:
         "connect_commands": [
             {
                 "label_ja": "ワークスペースをリポジトリにつなぐ(<あなたのアカウント> は自分のGitHubアカウント名に置き換えてください)",
-                "command": f"cd {ws} && git remote add origin git@github.com:<あなたのアカウント>/{repo}.git",
+                "label_en": "Connect the workspace to the repository (replace <your-account> with your GitHub account name)",
+                "command": f"cd {ws} && git remote add origin git@github.com:<your-account>/{repo}.git",
             },
             {
                 "label_ja": "最初の内容をpushする",
+                "label_en": "Push the initial contents",
                 "command": f'cd {ws} && git add -A && git commit -m "initial workspace" && git push -u origin main',
             },
         ],
         "login_command": {
             "label_ja": "Claude Codeを起動して初回ログイン(ここでプラン/課金の設定をします)",
+            "label_en": "Start Claude Code and log in for the first time (plan/billing is set up here)",
             "command": f"cd {ws} && claude",
         },
     }
@@ -541,55 +582,67 @@ async def get_claude_support_pubkey():
 # user input -- it is fixed to <robot_namespace>_claude (repo_suggestion).
 _GH_ACCOUNT_RE = re.compile(r"^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$")
 
-# (pattern, hint, is_ssh_issue) -- SSH auth failures share one wording
-# (engine.SSH_ISSUE_MESSAGE) and get recovery actions in the frontend.
-_CONNECT_HINTS: list[tuple[re.Pattern, str, bool]] = [
-    (re.compile(r"permission denied", re.I), engine.SSH_ISSUE_MESSAGE, True),
+# (pattern, hint_ja, hint_en, is_ssh_issue) -- SSH auth failures share one
+# wording (engine.SSH_ISSUE_MESSAGE*) and get recovery actions in the frontend.
+_CONNECT_HINTS: list[tuple[re.Pattern, str, str, bool]] = [
+    (re.compile(r"permission denied", re.I),
+     engine.SSH_ISSUE_MESSAGE, engine.SSH_ISSUE_MESSAGE_EN, True),
     (re.compile(r"repository not found", re.I),
      "リポジトリ(手順1)は作成済みですか?アカウント名とリポジトリ名が合っているか確認してください。"
-     "(README・License付きで作成した場合もそのまま取り込めます)", False),
+     "(README・License付きで作成した場合もそのまま取り込めます)",
+     "Did you create the repository (step 1)? Check that the account and repository names match. "
+     "(Creating it with a README/License is fine — they get merged in.)", False),
     (re.compile(r"could not resolve hostname|network is unreachable", re.I),
-     "ネットワーク接続を確認してください。", False),
+     "ネットワーク接続を確認してください。", "Check your network connection.", False),
 ]
+
+_ACCOUNT_FORMAT_ERROR = (
+    "GitHubアカウント名の形式が正しくありません。"
+    "英数字とハイフン(先頭・末尾以外)だけで、39文字以内で入力してください。"
+)
+_ACCOUNT_FORMAT_ERROR_EN = (
+    "That doesn't look like a valid GitHub account name: letters, digits and "
+    "inner hyphens only, at most 39 characters."
+)
+_RUN_STEP_FIRST = "先にこのステップを実行してワークスペースを作成してください。"
+_RUN_STEP_FIRST_EN = "Run this step first to create the workspace."
 
 
 class ConnectRepoBody(BaseModel):
     account: str
+    lang: str = "ja"
 
 
 @app.post("/api/steps/claude_support/connect_repo")
 async def claude_support_connect_repo(body: ConnectRepoBody):
     account = body.account.strip()
     if not account or len(account) > 39 or not _GH_ACCOUNT_RE.match(account):
-        raise HTTPException(
-            400,
-            "GitHubアカウント名の形式が正しくありません。"
-            "英数字とハイフン(先頭・末尾以外)だけで、39文字以内で入力してください。",
-        )
+        raise HTTPException(400, _pick(body.lang, _ACCOUNT_FORMAT_ERROR, _ACCOUNT_FORMAT_ERROR_EN))
     info = _load_claude_support_info()
     if info is None or not info.get("workspace_dir"):
-        raise HTTPException(409, "先にこのステップを実行してワークスペースを作成してください。")
+        raise HTTPException(409, _pick(body.lang, _RUN_STEP_FIRST, _RUN_STEP_FIRST_EN))
     repo = info.get("repo_suggestion", "cube_petit_claude")
     repo_url = f"git@github.com:{account}/{repo}.git"
     result = await engine.connect_repo(info["workspace_dir"], repo_url)
     result["repo_url"] = repo_url
     result["ssh_issue"] = False
     if not result["ok"]:
-        for pattern, hint, is_ssh in _CONNECT_HINTS:
+        for pattern, hint, hint_en, is_ssh in _CONNECT_HINTS:
             if pattern.search(result["output"]):
                 result["hint"] = hint
+                result["hint_en"] = hint_en
                 result["ssh_issue"] = is_ssh
                 break
     return result
 
 
 @app.post("/api/steps/claude_support/open_terminal")
-async def claude_support_open_terminal():
+async def claude_support_open_terminal(body: LangBody = Body(default=LangBody())):
     """Open a terminal running `claude` on the robot's own display (the
     first login is interactive and cannot happen inside the web app)."""
     info = _load_claude_support_info()
     if info is None or not info.get("workspace_dir"):
-        raise HTTPException(409, "先にこのステップを実行してワークスペースを作成してください。")
+        raise HTTPException(409, _pick(body.lang, _RUN_STEP_FIRST, _RUN_STEP_FIRST_EN))
     return await engine.open_claude_terminal(info["workspace_dir"])
 
 
@@ -599,14 +652,10 @@ async def claude_support_precheck_repo(body: ConnectRepoBody):
     exists -- so the user can fix steps 1-2 before pressing connect."""
     account = body.account.strip()
     if not account or len(account) > 39 or not _GH_ACCOUNT_RE.match(account):
-        raise HTTPException(
-            400,
-            "GitHubアカウント名の形式が正しくありません。"
-            "英数字とハイフン(先頭・末尾以外)だけで、39文字以内で入力してください。",
-        )
+        raise HTTPException(400, _pick(body.lang, _ACCOUNT_FORMAT_ERROR, _ACCOUNT_FORMAT_ERROR_EN))
     info = _load_claude_support_info()
     if info is None:
-        raise HTTPException(409, "先にこのステップを実行してワークスペースを作成してください。")
+        raise HTTPException(409, _pick(body.lang, _RUN_STEP_FIRST, _RUN_STEP_FIRST_EN))
     repo = info.get("repo_suggestion", "cube_petit_claude")
     items = await engine.precheck_repo(account, repo)
     return {"items": items, "all_ok": all(i["ok"] for i in items)}
