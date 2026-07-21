@@ -23,5 +23,3 @@ robots:
 
 ports:
   setup: 8760      # setup wizard (this web app)
-  control: 5173    # robot web interface (frontend)
-  api: 8000        # robot web interface API server

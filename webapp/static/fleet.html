@@ -9,18 +9,19 @@
 </head>
 <body>
   <header class="fleet-topbar">
-    <h1>Cube Petit 機体一覧</h1>
+    <h1 id="fleet-title">Cube Petit 機体一覧</h1>
+    <button id="lang-toggle" class="lang-toggle" type="button" title="Switch language">EN</button>
   </header>
 
   <main class="fleet-layout">
-    <p class="fleet-hint">
+    <p class="fleet-hint" id="fleet-hint">
       機体を選んで開いてください。●は「この端末からセットアップ画面に届くか」の目安です
       (電源が入っていない機体や別ネットワークの機体は灰色になります)。
     </p>
     <div id="fleet-grid" class="fleet-grid">
       <p class="fleet-loading">読み込み中...</p>
     </div>
-    <p class="fleet-footnote">
+    <p class="fleet-footnote" id="fleet-footnote">
       機体の追加・削除は <code>webapp/fleet.yaml</code> を編集してください。
     </p>
   </main>

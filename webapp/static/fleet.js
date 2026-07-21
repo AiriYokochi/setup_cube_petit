@@ -1,6 +1,60 @@
 // Fleet landing page: renders robot cards from /api/fleet and probes each
 // robot's setup app for reachability. Plain JS, no build step, no CDN.
 
+// Language handling mirrors the wizard (app.js): the choice is shared via
+// the same localStorage key, so switching on either page carries over.
+const STR = {
+  ja: {
+    title: "Cube Petit 機体一覧",
+    hint:
+      "機体を選んで開いてください。●は「この端末からセットアップ画面に届くか」の目安です" +
+      "(電源が入っていない機体や別ネットワークの機体は灰色になります)。",
+    footnote: "機体の追加・削除は <code>webapp/fleet.yaml</code> を編集してください。",
+    loading: "読み込み中...",
+    checking: "確認中...",
+    up: "接続できます",
+    down: "届きません(電源オフ or 別ネットワーク)",
+    empty: "fleet.yaml に機体が登録されていません。",
+    load_error: "一覧を読み込めませんでした。",
+    setup: "セットアップ",
+  },
+  en: {
+    title: "Cube Petit Fleet",
+    hint:
+      "Pick a robot to open it. The ● dot shows whether its setup page is " +
+      "reachable from this device (robots that are powered off or on another " +
+      "network appear gray).",
+    footnote: "To add or remove robots, edit <code>webapp/fleet.yaml</code>.",
+    loading: "Loading...",
+    checking: "Checking...",
+    up: "Reachable",
+    down: "Not reachable (powered off or on another network)",
+    empty: "No robots are registered in fleet.yaml.",
+    load_error: "Could not load the fleet list.",
+    setup: "Setup",
+  },
+};
+
+let LANG = (() => {
+  const saved = localStorage.getItem("cps_lang");
+  if (saved === "ja" || saved === "en") return saved;
+  return (navigator.language || "ja").toLowerCase().startsWith("ja") ? "ja" : "en";
+})();
+
+function t(key) {
+  const v = (STR[LANG] || STR.ja)[key];
+  return v === undefined ? STR.ja[key] : v;
+}
+
+function applyStaticTexts() {
+  document.documentElement.lang = LANG;
+  document.title = t("title");
+  document.getElementById("fleet-title").textContent = t("title");
+  document.getElementById("fleet-hint").textContent = t("hint");
+  document.getElementById("fleet-footnote").innerHTML = t("footnote");
+  document.getElementById("lang-toggle").textContent = LANG === "ja" ? "EN" : "日本語";
+}
+
 // Built-in accent palette, used when fleet.yaml doesn't give a color.
 const DEFAULT_COLORS = {
   orange: "#E8830C",
@@ -47,7 +101,7 @@ function makeCard(robot, ports) {
   name.style.color = color;
   const dot = document.createElement("span");
   dot.className = "fleet-dot checking";
-  dot.title = "確認中...";
+  dot.title = t("checking");
   head.appendChild(img);
   head.appendChild(name);
   head.appendChild(dot);
@@ -63,7 +117,7 @@ function makeCard(robot, ports) {
   const setup = document.createElement("a");
   setup.className = "setup";
   setup.href = `http://${robot.host}:${ports.setup}/`;
-  setup.textContent = "セットアップ";
+  setup.textContent = t("setup");
   setup.style.background = color;
   // Light accents (yellow/clear) need dark text to stay readable.
   const rgb = /^#?([0-9a-f]{6})$/i.exec(color || "");
@@ -72,12 +126,7 @@ function makeCard(robot, ports) {
     const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
     setup.style.color = lum > 0.62 ? "#3b3325" : "#ffffff";
   }
-  const control = document.createElement("a");
-  control.className = "control";
-  control.href = `http://${robot.host}:${ports.control}/`;
-  control.textContent = "操作画面";
   links.appendChild(setup);
-  links.appendChild(control);
   card.appendChild(links);
 
   probe(robot.host, ports.setup, dot);
@@ -92,31 +141,40 @@ function probe(host, port, dot) {
   fetch(`http://${host}:${port}/`, { mode: "no-cors", cache: "no-store", signal: ctrl.signal })
     .then(() => {
       dot.className = "fleet-dot up";
-      dot.title = "接続できます";
+      dot.title = t("up");
     })
     .catch(() => {
       dot.className = "fleet-dot down";
-      dot.title = "届きません(電源オフ or 別ネットワーク)";
+      dot.title = t("down");
     })
     .finally(() => clearTimeout(timer));
 }
 
 async function init() {
   const grid = document.getElementById("fleet-grid");
+  grid.innerHTML = `<p class='fleet-loading'>${t("loading")}</p>`;
   try {
     const res = await fetch("/api/fleet");
     const data = await res.json();
-    const ports = Object.assign({ setup: 8760, control: 5173, api: 8000 }, data.ports || {});
+    const ports = Object.assign({ setup: 8760 }, data.ports || {});
     grid.innerHTML = "";
     const robots = data.robots || [];
     if (!robots.length) {
-      grid.innerHTML = "<p class='fleet-loading'>fleet.yaml に機体が登録されていません。</p>";
+      grid.innerHTML = `<p class='fleet-loading'>${t("empty")}</p>`;
       return;
     }
     robots.forEach((r) => grid.appendChild(makeCard(r, ports)));
   } catch (e) {
-    grid.innerHTML = "<p class='fleet-loading'>一覧を読み込めませんでした。</p>";
+    grid.innerHTML = `<p class='fleet-loading'>${t("load_error")}</p>`;
   }
 }
 
+document.getElementById("lang-toggle").addEventListener("click", () => {
+  LANG = LANG === "ja" ? "en" : "ja";
+  localStorage.setItem("cps_lang", LANG);
+  applyStaticTexts();
+  init(); // re-render cards (button labels, dot tooltips)
+});
+
+applyStaticTexts();
 init();
