@@ -4,11 +4,23 @@ CAN_PORT="can0"
 BIT_RATE_OPTION="-s8"  # -s8 = 1Mbps
 HEALTH_CHECK_INTERVAL_SEC=5
 
-DEVICE_PATH=$(readlink -f /dev/serial/by-id/usb-Openlight_Labs_CANable2_*)
+# The CAN adapter model differs between robots: some units have an
+# Openlight Labs CANable2, others a Protofusion Labs CANable. Pick
+# whichever is present.
+DEVICE_PATH=""
+for candidate in \
+  /dev/serial/by-id/usb-Openlight_Labs_CANable2_* \
+  /dev/serial/by-id/usb-Protofusion_Labs_CANable_*; do
+  if [ -e "$candidate" ]; then
+    DEVICE_PATH=$(readlink -f "$candidate")
+    break
+  fi
+done
+
 echo "[INFO] Starting slcand for $DEVICE_PATH on $CAN_PORT"
 
-if [ ! -e "$DEVICE_PATH" ]; then
-  echo "[ERROR] Device path not found: $DEVICE_PATH"
+if [ -z "$DEVICE_PATH" ] || [ ! -e "$DEVICE_PATH" ]; then
+  echo "[ERROR] No supported CANable device found in /dev/serial/by-id"
   exit 1
 fi
 
