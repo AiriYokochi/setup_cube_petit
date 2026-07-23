@@ -23,7 +23,7 @@ set -u
 
 LIVE_WS="$HOME/ros"
 SESSION="petit"
-ROBOT_NS="${PETIT_ROBOT_NS:-cube_petit_orange}"
+ROBOT_NS="${PETIT_ROBOT_NS:-${ROBOT_NAMESPACE:-cube_petit_orange}}"
 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 CONFIG="${PETIT_TARGETS:-$SCRIPT_DIR/../config/petit_targets.yaml}"
