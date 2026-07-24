@@ -17,6 +17,7 @@ from typing import Optional
 
 import yaml
 from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -43,6 +44,19 @@ with open(engine.REPO_ROOT / "config" / "face_colors.yaml", encoding="utf-8") as
 
 app = FastAPI(title="cube_petit_setup webapp")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Allow the /fleet page, which is served by one robot but calls the setup
+# API of every other robot on the LAN (update/restart buttons), to read the
+# JSON response instead of getting an opaque no-cors response. This app has
+# no authentication of its own already (single-purpose robot PC, trusted
+# LAN only), so allowing any origin does not meaningfully change the trust
+# model -- it was already reachable from anywhere on the LAN.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
@@ -931,6 +945,20 @@ async def update_self():
         if not engine.MOCK:
             asyncio.get_event_loop().call_later(1.5, os._exit, 42)
     return result
+
+
+@app.post("/api/restart")
+async def restart_self():
+    """Restart this webapp process without pulling any new code -- for when
+    the checkout is already up to date but the running process is stale
+    (e.g. someone updated the repo out-of-band, as with `git pull` over
+    SSH), or the process is just misbehaving. Same restart mechanism as
+    /api/updates/self (exit 42, systemd's Restart=always brings it back),
+    exposed as its own button so it doesn't require an update to also be
+    pending. Mock never exits, same as update_self()."""
+    if not engine.MOCK:
+        asyncio.get_event_loop().call_later(1.5, os._exit, 42)
+    return {"ok": True, "restarting": True}
 
 
 @app.post("/api/updates/robot")

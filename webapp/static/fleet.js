@@ -17,6 +17,16 @@ const STR = {
     empty: "fleet.yaml に機体が登録されていません。",
     load_error: "一覧を読み込めませんでした。",
     setup: "セットアップ",
+    update: "アップデート",
+    restart: "再起動",
+    updating: "更新中...",
+    restarting: "再起動中...",
+    latest: "最新です",
+    updated_ok: "更新しました",
+    waiting_back: "起動待ち...",
+    back_up: "起動しました",
+    no_response: "応答がありません(時間をおいて確認してください)",
+    action_failed: "失敗しました",
   },
   en: {
     title: "Cube Petit Fleet",
@@ -32,6 +42,16 @@ const STR = {
     empty: "No robots are registered in fleet.yaml.",
     load_error: "Could not load the fleet list.",
     setup: "Setup",
+    update: "Update",
+    restart: "Restart",
+    updating: "Updating...",
+    restarting: "Restarting...",
+    latest: "Already up to date",
+    updated_ok: "Updated",
+    waiting_back: "Waiting for it to come back...",
+    back_up: "Back up",
+    no_response: "No response (check back in a bit)",
+    action_failed: "Failed",
   },
 };
 
@@ -73,6 +93,51 @@ const PETIT_FILTERS = {
   violet: "hue-rotate(221deg)",
   clear: "grayscale(0.85) brightness(1.25)",
 };
+
+// Cross-origin counterpart of the wizard's api() (app.js): this page is
+// served by one robot but the update/restart buttons act on whichever
+// robot the card belongs to, so every call crosses origins. CORSMiddleware
+// on the target robot's FastAPI app (main.py) is what makes the response
+// body readable here instead of an opaque no-cors result.
+async function crossApi(host, port, path, opts = {}) {
+  const res = await fetch(`http://${host}:${port}${path}`, {
+    method: opts.method || "GET",
+    headers: { "Content-Type": "application/json" },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    signal: opts.signal,
+  });
+  let payload = null;
+  try {
+    payload = await res.json();
+  } catch (e) {
+    // no/invalid JSON body
+  }
+  if (!res.ok) {
+    const detail = payload && payload.detail;
+    const message = (detail && detail.message) || detail || res.statusText;
+    throw new Error(typeof message === "string" ? message : JSON.stringify(message));
+  }
+  return payload;
+}
+
+// After triggering an update/restart the target process exits, so the
+// triggering request itself may error out with a connection reset even on
+// success. Poll the same reachability probe the dot already uses until the
+// robot answers again (or give up after a while).
+async function waitForBackUp(host, port, status) {
+  status.textContent = t("waiting_back");
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  await sleep(2000); // let the old process actually exit first
+  for (let i = 0; i < 30; i++) {
+    const alive = await crossApi(host, port, "/api/state").then(() => true).catch(() => false);
+    if (alive) {
+      status.textContent = t("back_up");
+      return;
+    }
+    await sleep(1000);
+  }
+  status.textContent = t("no_response");
+}
 
 function hexToRgba(hex, alpha) {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
@@ -129,8 +194,75 @@ function makeCard(robot, ports) {
   links.appendChild(setup);
   card.appendChild(links);
 
+  card.appendChild(makeFleetActions(robot.host, ports.setup));
+
   probe(robot.host, ports.setup, dot);
   return card;
+}
+
+// "アップデート"/"再起動" buttons: let Airi manage every robot's setup
+// webapp checkout from one page (/fleet) instead of SSHing into each one,
+// same operation as `git pull` + `systemctl --user restart
+// cube-petit-setup-webapp.service` done by hand.
+function makeFleetActions(host, port) {
+  const row = document.createElement("div");
+  row.className = "fleet-actions";
+
+  const status = document.createElement("span");
+  status.className = "fleet-action-status";
+
+  const pickErr = (r) => r.output || r.error || null;
+  const updateResultText = (r) => (r && r.updated ? t("updated_ok") : t("latest"));
+
+  const runAction = async (path, busyText) => {
+    row.querySelectorAll("button").forEach((b) => (b.disabled = true));
+    status.textContent = busyText;
+    status.classList.remove("error");
+    try {
+      const r = await crossApi(host, port, path, { method: "POST" });
+      if (r && r.restarting) {
+        await waitForBackUp(host, port, status);
+      } else if (r && r.ok === false) {
+        status.textContent = pickErr(r) || t("action_failed");
+        status.classList.add("error");
+      } else {
+        // /api/updates/self when nothing was pending returns {ok:true,
+        // updated:false}; /api/restart always sets restarting so never
+        // lands here. Anything else ok:true counts as a plain success.
+        status.textContent = r && "updated" in r ? updateResultText(r) : t("updated_ok");
+      }
+    } catch (err) {
+      // The request may have failed simply because the process exited
+      // before answering (success path) -- probe once before treating this
+      // as a real error.
+      const alive = await crossApi(host, port, "/api/state").then(() => true).catch(() => false);
+      if (!alive) {
+        await waitForBackUp(host, port, status);
+      } else {
+        status.textContent = `${t("action_failed")}: ${err.message}`;
+        status.classList.add("error");
+      }
+    } finally {
+      row.querySelectorAll("button").forEach((b) => (b.disabled = false));
+    }
+  };
+
+  const updateBtn = document.createElement("button");
+  updateBtn.type = "button";
+  updateBtn.className = "fleet-action-btn";
+  updateBtn.textContent = t("update");
+  updateBtn.addEventListener("click", () => runAction("/api/updates/self", t("updating")));
+
+  const restartBtn = document.createElement("button");
+  restartBtn.type = "button";
+  restartBtn.className = "fleet-action-btn";
+  restartBtn.textContent = t("restart");
+  restartBtn.addEventListener("click", () => runAction("/api/restart", t("restarting")));
+
+  row.appendChild(updateBtn);
+  row.appendChild(restartBtn);
+  row.appendChild(status);
+  return row;
 }
 
 function probe(host, port, dot) {
