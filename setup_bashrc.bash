@@ -52,6 +52,7 @@ fi
 
 cat >>"$BASHRC" <<EOF
 $MARK_START
+export ROBOT_NAMESPACE=${ROBOT_NAMESPACE}
 export ROS_DOMAIN_ID=${ROS_DOMAIN_ID}
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI=file://\$HOME/cyclonedds.xml
