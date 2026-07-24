@@ -516,7 +516,11 @@ function attachStream(runKey, stepId, opts = {}) {
 
 // Steps that show their own post-run guide panel instead of jumping ahead;
 // the user leaves them via that panel's explicit "next" button.
-const NO_AUTO_ADVANCE = new Set(["claude_support"]);
+// device_check is here too: udev_check.sh always exits 0 (NG items are
+// meant to be reviewable, not auto-skipped -- see steps.yaml), so without
+// this a run that only passed 6/11 would still jump straight to the next
+// step the instant it finished.
+const NO_AUTO_ADVANCE = new Set(["claude_support", "device_check"]);
 
 function advanceIfDone(stepId) {
   if (NO_AUTO_ADVANCE.has(stepId)) return;
@@ -1140,6 +1144,13 @@ function renderCheckStep(id, step, el, actions, running) {
   });
   runBtn.disabled = running;
   actions.appendChild(runBtn);
+
+  // No auto-advance for this step (see NO_AUTO_ADVANCE) -- offer an
+  // explicit way forward once a check has actually finished, same as the
+  // bluetooth step.
+  if (step.status === "done") {
+    actions.appendChild(mkButton("primary", t("next"), () => goToNextStep(id)));
+  }
 
   loadCheckResult(id, resultBox, statusEl);
 }
