@@ -20,6 +20,8 @@ import signal
 from pathlib import Path
 from typing import Optional
 
+import yaml
+
 from . import state as state_mod
 
 # webapp/app/engine.py -> app/ -> webapp/ -> repo root
@@ -271,6 +273,83 @@ def _build_claude_support_cmd(script_name: str, extra_env: dict) -> str:
         + f"\npython3 -c {shlex.quote(seed)}"
         + "\necho '[mock] wrote claude_support.json'"
     )
+
+
+# --- personality / voice settings (step 12) --------------------------------
+#
+# Unlike every other step, this one has no existing shell script to wrap --
+# it just needs to write two small YAML files. The field layout (both file
+# names and per-field keys) is carried over as-is from hello_cube_petit's
+# "Customize Cube Petit" feature, so any future consumer (cube_petit_chat,
+# text_to_speech) can read the same shape without another migration.
+#
+# Like _ros_setup_ws_dir()/_precheck_base(), the target directory is
+# redirected under MOCK_HOME while mocking, so mock runs never touch a real
+# machine's ~/.cube_petit. The write itself runs for real in both modes
+# (there is nothing unsafe to fake here -- it is just a file write), which is
+# why there is no separate _cmd_or_mock() branch below.
+#
+# The YAML text is rendered here (this process is guaranteed to have PyYAML --
+# it's a hard requirement of the webapp itself, see requirements.txt) and
+# then written out with `printf '%s'` in the child shell, the same
+# echo/shlex.quote composition _mock_check_cmd() already uses elsewhere in
+# this module. That sidesteps depending on the *system* python3 (the one
+# actually invoked, once _child_env() strips the venv) having PyYAML too.
+
+_PERSONALITY_FIELDS = [
+    "color", "personality", "nick_name", "dream", "favorite_fruit",
+    "favorite", "friends", "first_person_pronoun", "end_talk", "sample_talk",
+]
+
+# (field id -> default). Also defines voice.yaml's field order.
+_VOICE_DEFAULTS: dict[str, object] = {
+    "language": "ja",
+    "speech_emotion": "happiness",
+    "speech_emotion_level": 2,
+    "speech_pitch": 100,
+    "speech_speed": 100,
+    "speech_volume": 100,
+}
+_VOICE_INT_FIELDS = {"speech_emotion_level", "speech_pitch", "speech_speed", "speech_volume"}
+
+
+def personality_config_dir(state: dict) -> Path:
+    """~/.cube_petit/<robot_namespace>/ -- the same per-robot config directory
+    convention anima_state.json already uses."""
+    ns = state.get("robot_namespace") or "cube_petit"
+    base = MOCK_HOME if MOCK else Path.home()
+    return base / ".cube_petit" / ns
+
+
+def _build_personality_cmd(inputs: dict, state: dict) -> str:
+    config_dir = personality_config_dir(state)
+
+    personality = {k: str(inputs.get(k) or "") for k in _PERSONALITY_FIELDS}
+    voice: dict[str, object] = {}
+    for key, default in _VOICE_DEFAULTS.items():
+        raw = inputs.get(key)
+        if key in _VOICE_INT_FIELDS:
+            try:
+                voice[key] = int(raw)
+            except (TypeError, ValueError):
+                voice[key] = default
+        else:
+            voice[key] = str(raw) if raw else default
+
+    personality_text = yaml.safe_dump(personality, allow_unicode=True, sort_keys=False)
+    voice_text = yaml.safe_dump(voice, allow_unicode=True, sort_keys=False)
+
+    personality_path = config_dir / "personality.yaml"
+    voice_path = config_dir / "voice.yaml"
+
+    lines = [
+        f"mkdir -p {shlex.quote(str(config_dir))}",
+        f"printf '%s' {shlex.quote(personality_text)} > {shlex.quote(str(personality_path))}",
+        f"echo {shlex.quote(f'Wrote {personality_path}')}",
+        f"printf '%s' {shlex.quote(voice_text)} > {shlex.quote(str(voice_path))}",
+        f"echo {shlex.quote(f'Wrote {voice_path}')}",
+    ]
+    return "\n".join(lines)
 
 
 async def connect_repo(ws_dir: str, repo_url: str) -> dict:
@@ -848,6 +927,8 @@ async def run_step(step_def: dict, inputs: dict, state: dict) -> StepRun:
         return await start_command(step_id, cmd, cwd=REPO_ROOT, stdin_text=stdin_text)
     if step_type == "check":
         return await start_command(step_id, _build_check_cmd(step_def["script"]), cwd=REPO_ROOT)
+    if step_type == "personality_config":
+        return await start_command(step_id, _build_personality_cmd(inputs, state), cwd=REPO_ROOT)
     raise ValueError(f"step type {step_type!r} is not directly runnable via run_step()")
 
 

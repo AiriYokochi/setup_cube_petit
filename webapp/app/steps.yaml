@@ -398,6 +398,156 @@ steps:
           From the next boot, motors and sensors come up by themselves.
           OFF is recommended for development machines.
 
+  - id: personality
+    title_ja: "12. 性格・声の設定(任意)"
+    title_en: "12. Personality & voice settings (optional)"
+    description_ja: |
+      この機体のキャラクター設定(性格・ニックネームなど)と声の設定(音声合成の
+      パラメータ)を保存します。設定は ~/.cube_petit/<個体名>/ 以下の
+      personality.yaml / voice.yaml に書き込まれます。
+      会話機能(cube_petit_chat)や音声合成(text_to_speech)がこの設定を読み込んで
+      実際の振る舞いに反映するのは別の対応で行う予定です(今回はここで保存するだけです)。
+      入力しなくても、あとからいつでも設定・変更できます。
+    description_en: |
+      Saves this robot's character settings (personality, nickname, etc.) and
+      voice settings (speech-synthesis parameters) to
+      ~/.cube_petit/<robot_namespace>/personality.yaml and voice.yaml.
+      Wiring these into the actual conversation (cube_petit_chat) and speech
+      synthesis (text_to_speech) behavior is planned as separate follow-up
+      work (this step only saves the settings for now).
+      You can leave this blank and set it up anytime later.
+    type: personality_config
+    needs_sudo: false
+    skippable: true
+    requires_reboot: false
+    inputs:
+      - id: color
+        label_ja: "色(和名)"
+        label_en: "Color (Japanese name)"
+        placeholder: "ピンク"
+        type: text
+        default: ""
+        required: false
+      - id: personality
+        label_ja: "性格"
+        label_en: "Personality"
+        placeholder: "おっとり"
+        type: text
+        default: ""
+        required: false
+      - id: nick_name
+        label_ja: "ニックネーム"
+        label_en: "Nickname"
+        placeholder: "ピンクプチ"
+        type: text
+        default: ""
+        required: false
+      - id: dream
+        label_ja: "夢"
+        label_en: "Dream"
+        placeholder: "たくさんの人と繋がって元気を分け与えること"
+        type: text
+        default: ""
+        required: false
+      - id: favorite_fruit
+        label_ja: "好きな果物"
+        label_en: "Favorite fruit"
+        placeholder: "いちご"
+        type: text
+        default: ""
+        required: false
+      - id: favorite
+        label_ja: "好きなもの"
+        label_en: "Favorite thing"
+        placeholder: "ピンク色のもの"
+        type: text
+        default: ""
+        required: false
+      - id: friends
+        label_ja: "他の個体との関係性"
+        label_en: "Relationship with other robots"
+        placeholder: "オレンジ色のキューブプチでよく追いかけっこをしています。ニックネームはオレンジプチです。"
+        type: text
+        default: ""
+        required: false
+      - id: first_person_pronoun
+        label_ja: "一人称"
+        label_en: "First-person pronoun"
+        placeholder: "わたし"
+        type: text
+        default: ""
+        required: false
+      - id: end_talk
+        label_ja: "語尾の傾向"
+        label_en: "Speech ending style"
+        placeholder: "少し元気でやわらかい感じにします(例:〜だよ!、〜なんだ〜)。"
+        type: text
+        default: ""
+        required: false
+      - id: sample_talk
+        label_ja: "サンプル発話"
+        label_en: "Sample line"
+        placeholder: "「こんにちは〜!私はピンクプチだよ!今日はどんなお話をする?」"
+        type: text
+        default: ""
+        required: false
+      - id: language
+        label_ja: "言語コード"
+        label_en: "Language code"
+        type: text
+        default: "ja"
+        required: false
+        pattern: "^[a-z]{2}(-[A-Z]{2})?$"
+        help_ja: "音声合成の言語コードです(通常は ja のままで構いません)。"
+        help_en: "Language code for speech synthesis (usually leave this as ja)."
+        error_ja: "言語コードは ja のような形式(小文字2文字)で入力してください。"
+        error_en: "Enter the language code as two lowercase letters, e.g. ja."
+      - id: speech_emotion
+        label_ja: "話し方の感情"
+        label_en: "Speech emotion"
+        placeholder: "happiness"
+        type: text
+        default: "happiness"
+        required: false
+        help_ja: "音声合成エンジンの感情パラメータ名です(例: happiness)。"
+        help_en: "The emotion parameter name for the speech synthesis engine (e.g. happiness)."
+      - id: speech_emotion_level
+        label_ja: "感情の強さ(0〜9)"
+        label_en: "Emotion level (0-9)"
+        type: text
+        default: "2"
+        required: false
+        pattern: "^[0-9]$"
+        error_ja: "感情の強さは0〜9の半角数字1桁で入力してください。"
+        error_en: "Emotion level must be a single digit from 0 to 9."
+      - id: speech_pitch
+        label_ja: "声の高さ(0〜999)"
+        label_en: "Voice pitch (0-999)"
+        type: text
+        default: "100"
+        required: false
+        pattern: "^[0-9]{1,3}$"
+        error_ja: "声の高さは0〜999の半角数字で入力してください。"
+        error_en: "Voice pitch must be a number between 0 and 999."
+      - id: speech_speed
+        label_ja: "話す速さ(0〜999)"
+        label_en: "Speech speed (0-999)"
+        type: text
+        default: "100"
+        required: false
+        pattern: "^[0-9]{1,3}$"
+        error_ja: "話す速さは0〜999の半角数字で入力してください。"
+        error_en: "Speech speed must be a number between 0 and 999."
+      - id: speech_volume
+        label_ja: "音量(0〜999)"
+        label_en: "Volume (0-999)"
+        type: text
+        default: "100"
+        required: false
+        pattern: "^[0-9]{1,3}$"
+        error_ja: "音量は0〜999の半角数字で入力してください。"
+        error_en: "Volume must be a number between 0 and 999."
+
 # Shown once every step above is done/skipped, as a celebration screen with
 # "what do you want to do next" buttons. This is data (not code) on purpose,
 # so the labels/links can be edited later without touching app.js/main.py.
