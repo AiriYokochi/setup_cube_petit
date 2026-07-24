@@ -70,6 +70,11 @@ export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI=file://\$HOME/cyclonedds.xml
 ${OPENAI_LINE}
 
+# Shared with the autostart launcher (setup_autostart.bash) -- create this
+# file and add/uncomment "export CUBE_PETIT_AUTOSTART_DISABLE=1" in it to
+# stop bringup from relaunching itself at the next boot/service restart.
+[ -f "\$HOME/.config/cube_petit/env" ] && source "\$HOME/.config/cube_petit/env"
+
 alias 01_BRING="ros2 launch cube_petit_bringup cube_petit_bringup.launch.py${BRING_FACE_COLOR_ARG}"
 alias 02_DEMO="ros2 launch cube_petit_scenario cube_petit_talk_demo.launch.py"
 alias 04_TALK_START="ros2 service call /${ROBOT_NAMESPACE}/enable_realtime_conversation std_srvs/srv/SetBool \"data: true\""
