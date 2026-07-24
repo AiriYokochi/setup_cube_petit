@@ -684,6 +684,26 @@ async def claude_support_precheck_repo(body: ConnectRepoBody):
     return {"items": items, "all_ok": all(i["ok"] for i in items)}
 
 
+class IgnorePackageBody(BaseModel):
+    package: str
+
+
+@app.get("/api/steps/ros_setup/failed_packages")
+async def get_failed_packages():
+    state = state_mod.load_state()
+    return {"packages": engine.failed_packages_info("ros_setup", state)}
+
+
+@app.post("/api/steps/ros_setup/ignore_package")
+async def ignore_package(body: IgnorePackageBody):
+    state = state_mod.load_state()
+    try:
+        src_dir = engine.ignore_package(body.package.strip(), state)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"status": "ignored", "path": str(src_dir)}
+
+
 @app.get("/api/steps/{step_id}/result")
 async def get_step_result(step_id: str):
     step_def = _get_step_or_404(step_id)
