@@ -80,5 +80,16 @@ if ! sudo grep -q '^WaylandEnable=false' /etc/gdm3/custom.conf; then
   sudo sed -i '/^\[daemon\]/a WaylandEnable=false' /etc/gdm3/custom.conf
 fi
 
+# Disable the apport "System program problem detected" popup. This is a
+# kiosk/unattended machine that reboots on its own (autostart step); a
+# crash-report dialog blocking the desktop after a reboot defeats the
+# purpose. enabled=0 stops *new* reports; the rm clears any already-queued
+# ones so the dialog doesn't fire for crashes from before this ran.
+echo -e '\e[1;31m == Disable apport crash-report popup == \e[m'
+sudo sed -i 's/^enabled=1/enabled=0/' /etc/default/apport
+sudo systemctl stop apport.service 2>/dev/null || true
+sudo systemctl disable apport.service 2>/dev/null || true
+sudo rm -f /var/crash/*.crash /var/crash/*.upload /var/crash/*.uploaded 2>/dev/null || true
+
 echo -e '\e[1;31m == Setup PC Finished == \e[m'
 echo 'Auto-login and other display settings take effect after the next reboot.'
