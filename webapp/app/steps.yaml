@@ -16,12 +16,13 @@ steps:
     title_en: "1. Preflight check"
     description_ja: |
       この機体のPCがセットアップ可能な状態か確認します。
-      あわせて、この機体の名前(個体名)を入力してください。
-      例: cube_petit_yellow のように、色や識別名を英数字とアンダースコアで入力します。
+      あわせて、この機体の名前(個体名)と、顔の色を入力してください。
+      個体名は cube_petit_yellow のように、色や識別名を英数字とアンダースコアで入力します。
     description_en: |
       Checks that this robot's PC is ready to be set up.
-      Also enter this robot's name here.
-      Example: cube_petit_yellow — lowercase letters, digits and underscores.
+      Also enter this robot's name and its face color here.
+      Example robot name: cube_petit_yellow — lowercase letters, digits and
+      underscores.
     type: prereq_check
     needs_sudo: false
     skippable: false
@@ -50,6 +51,27 @@ steps:
         error_en: >-
           Enter the robot name like cube_petit_yellow, using lowercase
           letters, digits and underscores only (no hyphens or capitals).
+      - id: face_color
+        label_ja: "顔の色"
+        label_en: "Face color"
+        # type "color": rendered as palette swatches (config/face_colors.yaml,
+        # attached server-side as this input's "options") plus a free-text
+        # hex field. The saved value is always a resolved "#RRGGBB" hex code
+        # -- see main.py's get_state()/_prereq_inputs and save_inputs().
+        type: color
+        default: ""
+        required: true
+        pattern: "^#[0-9A-Fa-f]{6}$"
+        help_ja: >-
+          下から選ぶか、hexカラーコード(例: #ffa500)を直接入力してください。
+          この色がロボット起動時の顔の色になります(cube_petit_bringupの
+          face_color引数にそのまま渡ります)。
+        help_en: >-
+          Pick one below, or type a hex color code directly (e.g. #ffa500).
+          This becomes the robot's face color at startup (passed straight
+          through as cube_petit_bringup's face_color argument).
+        error_ja: "顔の色は #ffa500 のような6桁のhexカラーコードで入力してください。"
+        error_en: "Face color must be a 6-digit hex color code, like #ffa500."
 
   - id: pc_setup
     title_ja: "2. PC基本設定"

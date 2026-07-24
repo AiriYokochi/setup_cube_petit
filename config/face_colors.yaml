@@ -1,0 +1,53 @@
+# Face color palette for the cube_petit_setup wizard's "color" input type
+# (see steps.yaml's prereq step, face_color input).
+#
+# This is the data cube_petit_ros's COLOR_MAP used to be: the wizard now
+# resolves the robot's face color to a hex code itself and passes it straight
+# through as the cube_petit_bringup.launch.py `face_color` argument, so
+# adding a new color here needs no cube_petit_ros code change or rebuild
+# (cube_petit_facial_animation still falls back to its own name lookup for
+# any hex-less value, e.g. old launch invocations that pass a bare name).
+#
+# label_en falls back to label_ja when missing, same i18n convention as
+# steps.yaml.
+colors:
+  - id: blue
+    label_ja: "青"
+    label_en: "Blue"
+    hex: "#42AFE3"
+  - id: pink
+    label_ja: "ピンク"
+    label_en: "Pink"
+    hex: "#ff7da8"
+  - id: orange
+    label_ja: "オレンジ"
+    label_en: "Orange"
+    hex: "#ffa500"
+  - id: green
+    label_ja: "緑"
+    label_en: "Green"
+    hex: "#6ac259"
+  - id: yellow
+    label_ja: "黄色"
+    label_en: "Yellow"
+    hex: "#fff176"
+  - id: purple
+    label_ja: "紫"
+    label_en: "Purple"
+    hex: "#ba68c8"
+  - id: red
+    label_ja: "赤"
+    label_en: "Red"
+    hex: "#ef5350"
+  - id: clear
+    label_ja: "クリア"
+    label_en: "Clear"
+    hex: "#A3A3A3"
+  - id: lightgreen
+    label_ja: "黄緑"
+    label_en: "Light green"
+    hex: "#42E34D"
+  - id: white
+    label_ja: "白"
+    label_en: "White"
+    hex: "#8E8E8E"

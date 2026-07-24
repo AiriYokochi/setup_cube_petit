@@ -1469,6 +1469,67 @@ function renderDetail(id) {
       }
       if (inputDef.detect_cmd) boolRows[inputDef.id] = { row, input };
       formGetters[inputDef.id] = () => input.checked;
+    } else if (inputDef.type === "color") {
+      row.appendChild(label);
+
+      const picker = document.createElement("div");
+      picker.className = "color-picker";
+
+      const swatchWrap = document.createElement("div");
+      swatchWrap.className = "color-swatches";
+      const swatches = [];
+
+      const hexRow = document.createElement("div");
+      hexRow.className = "color-hex-row";
+      const preview = document.createElement("span");
+      preview.className = "color-preview";
+      const hexInput = document.createElement("input");
+      hexInput.type = "text";
+      hexInput.className = "color-hex-input";
+      hexInput.placeholder = "#RRGGBB";
+      hexInput.value = savedInputs[inputDef.id] ?? inputDef.default ?? "";
+
+      const isHex = (v) => /^#[0-9a-fA-F]{6}$/.test(v);
+      const sync = () => {
+        const v = hexInput.value.trim();
+        preview.style.background = isHex(v) ? v : "transparent";
+        swatches.forEach(({ btn, hex }) => {
+          btn.classList.toggle("selected", hex.toLowerCase() === v.toLowerCase());
+        });
+      };
+
+      (inputDef.options || []).forEach((opt) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "color-swatch";
+        btn.style.background = opt.hex;
+        const optLabel = L(opt, "label") || opt.hex;
+        btn.title = optLabel;
+        btn.setAttribute("aria-label", optLabel);
+        btn.addEventListener("click", () => {
+          hexInput.value = opt.hex;
+          sync();
+        });
+        swatchWrap.appendChild(btn);
+        swatches.push({ btn, hex: opt.hex });
+      });
+      picker.appendChild(swatchWrap);
+
+      hexInput.addEventListener("input", sync);
+      hexRow.appendChild(preview);
+      hexRow.appendChild(hexInput);
+      picker.appendChild(hexRow);
+
+      row.appendChild(picker);
+      sync();
+
+      if (inputDef.help_ja || inputDef.help_en) {
+        const help = document.createElement("div");
+        help.className = "help";
+        help.textContent = L(inputDef, "help");
+        row.appendChild(help);
+      }
+      formGetters[inputDef.id] = () => hexInput.value.trim();
     } else {
       row.appendChild(label);
       const input = document.createElement("input");
