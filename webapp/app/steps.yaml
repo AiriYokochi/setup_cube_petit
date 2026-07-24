@@ -430,6 +430,9 @@ steps:
       会話機能(cube_petit_chat)や音声合成(text_to_speech)がこの設定を読み込んで
       実際の振る舞いに反映するのは別の対応で行う予定です(今回はここで保存するだけです)。
       入力しなくても、あとからいつでも設定・変更できます。
+      すでに設定済みの機体では、保存されている内容がそのままフォームに読み込まれます。
+      話し方(感情・声の高さ・速さ・音量)は「▶ 再生」ボタンで、保存前でも実際に
+      試し聞きできます(ロボットのプログラムが起動している必要があります)。
     description_en: |
       Saves this robot's character settings (personality, nickname, etc.) and
       voice settings (speech-synthesis parameters) to
@@ -438,6 +441,10 @@ steps:
       synthesis (text_to_speech) behavior is planned as separate follow-up
       work (this step only saves the settings for now).
       You can leave this blank and set it up anytime later.
+      If this robot already has settings saved, they are loaded into the form
+      as-is. The speech parameters (emotion, pitch, speed, volume) can be
+      test-played with the "Play" button even before saving (this requires
+      the robot's software to be running).
     type: personality_config
     needs_sudo: false
     skippable: true
@@ -450,6 +457,13 @@ steps:
         type: text
         default: ""
         required: false
+      - id: personality_template
+        label_ja: "性格テンプレート"
+        label_en: "Personality template"
+        type: template_select
+        required: false
+        help_ja: "選ぶと下の性格・夢・好きなもの等の欄に例文が入ります(そのまま自由に書き換えられます)。選択自体は保存されません。"
+        help_en: "Choosing one fills in the personality/dream/favorites fields below with example text (freely editable afterward). The selection itself is not saved."
       - id: personality
         label_ja: "性格"
         label_en: "Personality"
@@ -489,9 +503,11 @@ steps:
         label_ja: "他の個体との関係性"
         label_en: "Relationship with other robots"
         placeholder: "オレンジ色のキューブプチでよく追いかけっこをしています。ニックネームはオレンジプチです。"
-        type: text
-        default: ""
+        type: text_list
+        default: []
         required: false
+        help_ja: "「+ 追加」で何人分でも追加できます。空欄の行は保存されません。"
+        help_en: "Add as many as you like with \"+ Add\". Blank rows are not saved."
       - id: first_person_pronoun
         label_ja: "一人称"
         label_en: "First-person pronoun"
@@ -527,48 +543,63 @@ steps:
       - id: speech_emotion
         label_ja: "話し方の感情"
         label_en: "Speech emotion"
-        placeholder: "happiness"
-        type: text
-        default: "happiness"
+        type: select
+        default: "normal"
         required: false
-        help_ja: "音声合成エンジンの感情パラメータ名です(例: happiness)。"
-        help_en: "The emotion parameter name for the speech synthesis engine (e.g. happiness)."
+        options:
+          - id: happy
+            label_ja: "うれしい"
+            label_en: "Happy"
+          - id: normal
+            label_ja: "ふつう"
+            label_en: "Normal"
+          - id: angry
+            label_ja: "おこってる"
+            label_en: "Angry"
+          - id: bashful
+            label_ja: "はずかしい"
+            label_en: "Bashful"
+          - id: sad
+            label_ja: "かなしい"
+            label_en: "Sad"
+        help_ja: "音声合成エンジンが対応している感情はこの5種類だけです。"
+        help_en: "The speech-synthesis engine only supports these five emotions."
       - id: speech_emotion_level
-        label_ja: "感情の強さ(0〜9)"
-        label_en: "Emotion level (0-9)"
-        type: text
-        default: "2"
+        label_ja: "感情の強さ(1〜5)"
+        label_en: "Emotion level (1-5)"
+        type: slider
+        min: 1
+        max: 5
+        step: 1
+        default: 2
         required: false
-        pattern: "^[0-9]$"
-        error_ja: "感情の強さは0〜9の半角数字1桁で入力してください。"
-        error_en: "Emotion level must be a single digit from 0 to 9."
       - id: speech_pitch
-        label_ja: "声の高さ(0〜999)"
-        label_en: "Voice pitch (0-999)"
-        type: text
-        default: "100"
+        label_ja: "声の高さ(50〜199)"
+        label_en: "Voice pitch (50-199)"
+        type: slider
+        min: 50
+        max: 199
+        step: 1
+        default: 100
         required: false
-        pattern: "^[0-9]{1,3}$"
-        error_ja: "声の高さは0〜999の半角数字で入力してください。"
-        error_en: "Voice pitch must be a number between 0 and 999."
       - id: speech_speed
-        label_ja: "話す速さ(0〜999)"
-        label_en: "Speech speed (0-999)"
-        type: text
-        default: "100"
+        label_ja: "話す速さ(50〜299)"
+        label_en: "Speech speed (50-299)"
+        type: slider
+        min: 50
+        max: 299
+        step: 1
+        default: 100
         required: false
-        pattern: "^[0-9]{1,3}$"
-        error_ja: "話す速さは0〜999の半角数字で入力してください。"
-        error_en: "Speech speed must be a number between 0 and 999."
       - id: speech_volume
-        label_ja: "音量(0〜999)"
-        label_en: "Volume (0-999)"
-        type: text
-        default: "100"
+        label_ja: "音量(1〜100)"
+        label_en: "Volume (1-100)"
+        type: slider
+        min: 1
+        max: 100
+        step: 1
+        default: 100
         required: false
-        pattern: "^[0-9]{1,3}$"
-        error_ja: "音量は0〜999の半角数字で入力してください。"
-        error_en: "Volume must be a number between 0 and 999."
 
 # Shown once every step above is done/skipped, as a celebration screen with
 # "what do you want to do next" buttons. This is data (not code) on purpose,

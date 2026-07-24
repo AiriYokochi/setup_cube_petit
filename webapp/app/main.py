@@ -42,6 +42,12 @@ COMPLETION: dict = _STEPS_YAML.get("completion", {})
 with open(engine.REPO_ROOT / "config" / "face_colors.yaml", encoding="utf-8") as f:
     FACE_COLORS: list[dict] = (yaml.safe_load(f) or {}).get("colors", [])
 
+# Personality template presets (config/personality_templates.yaml): same
+# "data, not code" pattern as FACE_COLORS above -- see the personality step's
+# personality_template input in steps.yaml.
+with open(engine.REPO_ROOT / "config" / "personality_templates.yaml", encoding="utf-8") as f:
+    PERSONALITY_TEMPLATES: list[dict] = (yaml.safe_load(f) or {}).get("templates", [])
+
 app = FastAPI(title="cube_petit_setup webapp")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -315,6 +321,35 @@ def _prereq_inputs(state: dict, input_defs: list[dict]) -> list[dict]:
     return out
 
 
+def _personality_inputs(input_defs: list[dict]) -> list[dict]:
+    """personality step's input definitions with the template palette
+    (config/personality_templates.yaml) attached to personality_template --
+    same pattern as _prereq_inputs' face_color above."""
+    out = []
+    for d in input_defs:
+        if d["id"] == "personality_template":
+            d = {**d, "options": PERSONALITY_TEMPLATES}
+        out.append(d)
+    return out
+
+
+def _personality_disk_values(state: dict) -> dict:
+    """Values from ~/.cube_petit/<ns>/personality.yaml + voice.yaml, keyed
+    the same as the personality step's saved inputs (see
+    engine.read_saved_personality()/read_saved_voice()). Used by get_state()
+    to prefill the form straight from disk -- which wins over whatever (if
+    anything) state.json has recorded for this step, since the yaml files
+    are the actual source of truth any future consumer (cube_petit_chat,
+    text_to_speech) will read, and may have been edited by hand or carried
+    over from another machine without state.json ever being updated to
+    match."""
+    personality = engine.read_saved_personality(state)
+    voice = engine.read_saved_voice(state)
+    if personality is None and voice is None:
+        return {}
+    return {**(personality or {}), **(voice or {})}
+
+
 # --- pages ---------------------------------------------------------------
 
 @app.get("/")
@@ -502,13 +537,24 @@ async def get_state():
             step_out["inputs"] = _env_setup_inputs(state, step_def.get("inputs", []))
         elif step_def["id"] == "prereq":
             step_out["inputs"] = _prereq_inputs(state, step_def.get("inputs", []))
+        elif step_def["id"] == "personality":
+            step_out["inputs"] = _personality_inputs(step_def.get("inputs", []))
         steps_out.append(step_out)
     all_done = bool(steps_out) and all(s["status"] in ("done", "skipped") for s in steps_out)
+
+    # Saved-value overlay: personality/voice settings already on disk
+    # (~/.cube_petit/<ns>/{personality,voice}.yaml) win over state.json's own
+    # record for that step, see _personality_disk_values().
+    inputs_out = {k: dict(v) for k, v in state.get("inputs", {}).items()}
+    personality_disk = _personality_disk_values(state)
+    if personality_disk:
+        inputs_out["personality"] = {**inputs_out.get("personality", {}), **personality_disk}
+
     return {
         "robot_namespace": state.get("robot_namespace"),
         "face_color": state.get("face_color"),
         "awaiting_reboot": state.get("awaiting_reboot", False),
-        "inputs": state.get("inputs", {}),
+        "inputs": inputs_out,
         "steps": steps_out,
         "mock": engine.MOCK,
         "all_done": all_done,
@@ -542,6 +588,27 @@ async def save_inputs(step_id: str, body: InputsBody):
                                  f"「{label}」の形式が正しくありません",
                                  f'"{label}" is not in the expected format.'),
                 )
+        # "select" (e.g. speech_emotion) / "slider" (e.g. speech_pitch):
+        # reject anything outside the declared domain server-side too, not
+        # just in the frontend widget -- this is the endpoint
+        # _build_personality_cmd()'s save path runs right after, and a bad
+        # value here would otherwise only get silently clamped there.
+        if d.get("type") == "select" and value not in (None, "") and d.get("options"):
+            valid_ids = {opt["id"] for opt in d["options"]}
+            if value not in valid_ids:
+                raise HTTPException(400, _pick(
+                    lang, f"「{label}」の値が正しくありません", f'"{label}" has an invalid value.'))
+        if d.get("type") == "slider" and value not in (None, ""):
+            try:
+                num = int(value)
+            except (TypeError, ValueError):
+                raise HTTPException(400, _pick(
+                    lang, f"「{label}」は数値で入力してください", f'"{label}" must be a number.'))
+            lo, hi = d.get("min"), d.get("max")
+            if (lo is not None and num < lo) or (hi is not None and num > hi):
+                raise HTTPException(400, _pick(
+                    lang, f"「{label}」は{lo}〜{hi}の範囲で入力してください",
+                    f'"{label}" must be between {lo} and {hi}.'))
 
     state = state_mod.load_state()
     state["inputs"].setdefault(step_id, {}).update(body.inputs)
@@ -689,6 +756,36 @@ async def complete_step(step_id: str):
         state["awaiting_reboot"] = True
         result["awaiting_reboot"] = True
     state_mod.save_state(state)
+    return result
+
+
+# --- personality/voice test-play (step 12's "▶ 再生" button) ----------------
+
+class TestSpeechBody(BaseModel):
+    emotion: Optional[str] = None
+    emotion_level: Optional[int] = None
+    pitch: Optional[int] = None
+    speed: Optional[int] = None
+    volume: Optional[int] = None
+
+
+@app.post("/api/personality/test_speech")
+async def personality_test_speech(body: TestSpeechBody):
+    """Speaks a fixed test phrase through this robot's real speech_action_server
+    using whatever emotion/pitch/speed/volume are currently in the personality
+    step's form -- saved or not. See engine.run_test_speech() for the actual
+    subprocess handling (argv-exec, no shell, clamped values, 15s timeout)."""
+    state = state_mod.load_state()
+    result = await engine.run_test_speech(
+        {
+            "emotion": body.emotion,
+            "emotion_level": body.emotion_level,
+            "pitch": body.pitch,
+            "speed": body.speed,
+            "volume": body.volume,
+        },
+        state,
+    )
     return result
 
 
