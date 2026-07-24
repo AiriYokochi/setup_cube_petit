@@ -5,12 +5,14 @@ BIT_RATE_OPTION="-s8"  # -s8 = 1Mbps
 HEALTH_CHECK_INTERVAL_SEC=5
 
 # The CAN adapter model differs between robots: some units have an
-# Openlight Labs CANable2, others a Protofusion Labs CANable. Pick
-# whichever is present.
+# Openlight Labs CANable2, others a Protofusion Labs CANable, and some
+# clones just report their bare UART bridge chip (Silicon Labs CP2102)
+# instead of a CANable-branded string. Pick whichever is present.
 DEVICE_PATH=""
 for candidate in \
   /dev/serial/by-id/usb-Openlight_Labs_CANable2_* \
-  /dev/serial/by-id/usb-Protofusion_Labs_CANable_*; do
+  /dev/serial/by-id/usb-Protofusion_Labs_CANable_* \
+  /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_*; do
   if [ -e "$candidate" ]; then
     DEVICE_PATH=$(readlink -f "$candidate")
     break
