@@ -75,6 +75,7 @@ ${OPENAI_LINE}
 # stop bringup from relaunching itself at the next boot/service restart.
 [ -f "\$HOME/.config/cube_petit/env" ] && source "\$HOME/.config/cube_petit/env"
 
+alias stop_cube_petit_service="systemctl --user stop cube-petit-bringup.service"
 alias 01_BRING="ros2 launch cube_petit_bringup cube_petit_bringup.launch.py${BRING_FACE_COLOR_ARG}"
 alias 02_DEMO="ros2 launch cube_petit_scenario cube_petit_talk_demo.launch.py"
 alias 04_TALK_START="ros2 service call /${ROBOT_NAMESPACE}/enable_realtime_conversation std_srvs/srv/SetBool \"data: true\""
