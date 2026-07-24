@@ -747,6 +747,83 @@ def _ros_ws_built(ws_dir: Path) -> bool:
     return any(p.name.startswith("cube_petit_") for p in install_dir.iterdir())
 
 
+# --- ros_setup: recovering from a single failed package --------------------
+#
+# A colcon build can fail on one package (e.g. a vendored copy whose CMake
+# cache went stale after a system library upgrade -- see resolve_precheck's
+# docstring) while everything else would build fine. Rather than block the
+# whole wizard on it, offer to COLCON_IGNORE that package's source -- but
+# ONLY when the official ROS distro underlay already provides a package of
+# the same name, which is the one case where skipping the local copy can't
+# silently drop something CubePetit actually needs.
+
+_ROS_UNDERLAY = Path("/opt/ros/jazzy")
+_COLCON_FAILED_RE = re.compile(r"^\s*\d+\s+packages?\s+failed:\s*(.+)$", re.MULTILINE)
+
+
+def _package_src_dir(pkg_name: str, ws_dir: Path) -> Optional[Path]:
+    """Find pkg_name's source directory under ws_dir/src by matching
+    <name>pkg_name</name> in package.xml -- colcon package names don't
+    always match their containing directory (e.g. vision_msgs is vendored
+    two levels deep, under cube_petit_interaction/vision_msgs/)."""
+    src_dir = ws_dir / "src"
+    if not src_dir.is_dir():
+        return None
+    name_tag = f"<name>{pkg_name}</name>"
+    for pkg_xml in src_dir.rglob("package.xml"):
+        try:
+            if name_tag in pkg_xml.read_text(encoding="utf-8"):
+                return pkg_xml.parent
+        except OSError:
+            continue
+    return None
+
+
+def _package_in_ros_underlay(pkg_name: str) -> bool:
+    return (_ROS_UNDERLAY / "share" / pkg_name / "package.xml").is_file()
+
+
+def failed_packages_info(step_id: str, state: dict) -> list[dict]:
+    """Parse the step's log for colcon's "N package(s) failed: ..." summary
+    and report, for each, whether ignoring its source is safe (see module
+    note above) and whether it already has been."""
+    log_path = state_mod.log_path_for(step_id)
+    if not log_path.is_file():
+        return []
+    text = log_path.read_text(encoding="utf-8", errors="replace")
+    names: list[str] = []
+    for m in _COLCON_FAILED_RE.finditer(text):
+        names.extend(n.strip() for n in m.group(1).split(",") if n.strip())
+
+    ws_dir = resolved_ros_ws(state)
+    result = []
+    for name in dict.fromkeys(names):  # de-dupe, keep first-seen order
+        src_dir = _package_src_dir(name, ws_dir)
+        result.append({
+            "package": name,
+            "ignorable": bool(src_dir) and _package_in_ros_underlay(name),
+            "already_ignored": bool(src_dir) and (src_dir / "COLCON_IGNORE").exists(),
+        })
+    return result
+
+
+def ignore_package(pkg_name: str, state: dict) -> Path:
+    """Place a COLCON_IGNORE marker in pkg_name's source directory. Always
+    re-validates ignorability itself -- never trust a client-supplied flag
+    for something this consequential."""
+    ws_dir = resolved_ros_ws(state)
+    src_dir = _package_src_dir(pkg_name, ws_dir)
+    if src_dir is None:
+        raise ValueError(f"package not found under {ws_dir / 'src'}: {pkg_name}")
+    if not _package_in_ros_underlay(pkg_name):
+        raise ValueError(
+            f"{pkg_name} is not provided by the ROS underlay ({_ROS_UNDERLAY}) -- "
+            "refusing to ignore a package with no other source for it"
+        )
+    (src_dir / "COLCON_IGNORE").touch()
+    return src_dir
+
+
 async def run_step(step_def: dict, inputs: dict, state: dict) -> StepRun:
     step_id = step_def["id"]
     step_type = step_def["type"]

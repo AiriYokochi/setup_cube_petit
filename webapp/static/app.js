@@ -38,6 +38,11 @@ const STR = {
     skip: "スキップ",
     cancel_run: "中断",
     cancel_failed: (msg) => `中断に失敗しました: ${msg}`,
+    ignore_pkg_title: "ビルドに失敗したパッケージ",
+    ignore_pkg_note: (pkg) => `${pkg} はROSの標準配布(underlay)にも同じ名前で存在するため、無視して次に進めます。`,
+    ignore_pkg_btn: "このパッケージを無視して次に進む",
+    ignore_pkg_done: (pkg) => `${pkg} を無視するよう設定しました。「もう一度実行」で反映されます。`,
+    ignore_pkg_failed: (msg) => `無視の設定に失敗しました: ${msg}`,
     reboot_ack: "確認しました(この後、機体を再起動してください)",
     rerun_note: "このステップの処理内容がアップデートで変わっています。「もう一度実行」で反映してください(再実行しても安全です)。",
     bt_none: "デバイスが見つかりませんでした。コントローラをペアリングモードにしてから、もう一度スキャンしてください。",
@@ -147,6 +152,11 @@ const STR = {
     skip: "Skip",
     cancel_run: "Stop",
     cancel_failed: (msg) => `Failed to stop: ${msg}`,
+    ignore_pkg_title: "Packages that failed to build",
+    ignore_pkg_note: (pkg) => `${pkg} is also provided by the ROS underlay under the same name, so it can be skipped.`,
+    ignore_pkg_btn: "Ignore this package and continue",
+    ignore_pkg_done: (pkg) => `${pkg} will be skipped from now on. Press "Run again" to apply it.`,
+    ignore_pkg_failed: (msg) => `Failed to set ignore: ${msg}`,
     reboot_ack: "Got it (please reboot the robot after this)",
     rerun_note: "This step's behavior changed in an update. Press \"Run again\" to apply it (re-running is safe).",
     bt_none: "No devices found. Put the controller into pairing mode and scan again.",
@@ -1290,6 +1300,46 @@ function renderRobotUpdate(id, el, actions) {
   actions.appendChild(btn);
 }
 
+// --- ros_setup: recover from a single failed package (COLCON_IGNORE) --------
+
+function renderFailedPackages(id, el, actions) {
+  api("/api/steps/ros_setup/failed_packages")
+    .then((res) => {
+      const ignorable = (res.packages || []).filter((p) => p.ignorable && !p.already_ignored);
+      if (!ignorable.length) return;
+
+      const box = document.createElement("div");
+      box.className = "warning-box";
+      const title = document.createElement("div");
+      title.textContent = t("ignore_pkg_title");
+      box.appendChild(title);
+
+      ignorable.forEach((p) => {
+        const row = document.createElement("div");
+        row.textContent = t("ignore_pkg_note", p.package);
+        box.appendChild(row);
+
+        const btn = mkButton("secondary", t("ignore_pkg_btn"), async () => {
+          btn.disabled = true;
+          try {
+            await api("/api/steps/ros_setup/ignore_package", {
+              method: "POST",
+              body: { package: p.package },
+            });
+            row.textContent = t("ignore_pkg_done", p.package);
+          } catch (err) {
+            alert(t("ignore_pkg_failed", err.message));
+            btn.disabled = false;
+          }
+        });
+        box.appendChild(btn);
+      });
+
+      el.insertBefore(box, actions);
+    })
+    .catch(() => {});
+}
+
 // --- installed-tool detection (dev_tools) ------------------------------------
 
 function applyInstalledInfo(id, boolRows) {
@@ -1508,6 +1558,13 @@ function renderDetail(id) {
   // Robot-source update action (shown on the ROS step when behind upstream).
   if (id === "ros_setup" && !running) {
     renderRobotUpdate(id, el, actions);
+  }
+
+  // Offer to skip a single failed package (COLCON_IGNORE) instead of
+  // blocking the whole wizard on it -- only when it's safe (see
+  // renderFailedPackages / engine.failed_packages_info).
+  if (id === "ros_setup" && step.status === "failed") {
+    renderFailedPackages(id, el, actions);
   }
 
   // For a not-yet-resolved precheck step, surface the choice up front.
