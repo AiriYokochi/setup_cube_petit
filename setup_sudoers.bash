@@ -39,7 +39,13 @@ echo -e '\e[1;31m == Grant passwordless sudo for cube_petit_setup scripts == \e[
 BINS="apt apt-get dpkg add-apt-repository tee cp install chmod sed gpg curl grep usermod systemctl udevadm locale-gen update-locale rosdep make ldconfig nmcli sysctl"
 CMD_LIST=""
 for b in $BINS; do
-  p="$(command -v "$b" || true)"
+  # type -P (unlike command -v) only ever returns a real executable's path --
+  # it ignores aliases and shell functions, which command -v does not (e.g.
+  # a `source`d run in an interactive shell with `alias grep='grep
+  # --color=auto'` in .bashrc made command -v grep print the alias
+  # definition text instead of a path, corrupting the generated sudoers
+  # file).
+  p="$(type -P "$b" 2>/dev/null || true)"
   if [ -z "$p" ]; then
     echo "  (skip: $b not found on this machine)"
     continue
