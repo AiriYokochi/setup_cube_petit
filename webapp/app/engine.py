@@ -16,6 +16,7 @@ import asyncio
 import os
 import re
 import shlex
+import signal
 from pathlib import Path
 from typing import Optional
 
@@ -65,6 +66,38 @@ def get_run(step_id: str) -> Optional[StepRun]:
 def is_running(step_id: str) -> bool:
     run = _runs.get(step_id)
     return bool(run and not run.done)
+
+
+async def cancel(step_id: str) -> bool:
+    """Best-effort abort of a running step: SIGTERM (then SIGKILL if it
+    doesn't die within 3s) to the whole process group started for it.
+
+    Caveat: a step's script may itself be running things under `sudo`
+    (needs_sudo: true in steps.yaml). Those child processes are owned by
+    root, and this server runs as the regular user -- the kernel will not
+    let us signal them, so only the sudo/apt/dpkg wrapper we spawned dies
+    here, not necessarily the privileged work underneath it. The caller
+    (main.py) surfaces a warning for that case; a genuinely stuck dpkg may
+    still need a manual `sudo dpkg --configure -a` afterward.
+    """
+    run = _runs.get(step_id)
+    if run is None or run.done or run.proc is None:
+        return False
+
+    pgid = os.getpgid(run.proc.pid)
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        return False
+
+    try:
+        await asyncio.wait_for(run.proc.wait(), timeout=3)
+    except asyncio.TimeoutError:
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    return True
 
 
 def script_path(name: str) -> Path:
@@ -152,6 +185,7 @@ async def start_command(
         stderr=asyncio.subprocess.STDOUT,
         cwd=str(cwd) if cwd else None,
         env=env,
+        start_new_session=True,  # own process group, so cancel() can kill the whole tree
     )
     run.proc = proc
 
@@ -806,8 +840,16 @@ def precheck_status(step_def: dict, state: dict) -> dict:
     }
 
 
-async def resolve_precheck(step_def: dict, choice: str) -> StepRun:
+async def resolve_precheck(step_def: dict, choice: str, state: dict) -> StepRun:
     """choice == 'clean': remove the pre-existing directories (its own loggable run).
+
+    For ros_setup this must also remove the colcon build/install/log
+    directories, not just the source trees in `precheck["paths"]`: a system
+    library upgrade (e.g. pc_setup's apt upgrade, earlier in the same
+    wizard run) can leave those directories' CMake caches pointing at a
+    .so filename that no longer exists, so reusing them after "clean"
+    re-clones the source reproduces the exact build failure "clean" was
+    meant to fix (colcon does not detect this on its own).
 
     Note: this always actually deletes `paths` -- it is NOT run through
     _cmd_or_mock(). That's safe because `_precheck_base()` already redirects
@@ -820,6 +862,9 @@ async def resolve_precheck(step_def: dict, choice: str) -> StepRun:
     precheck = step_def["precheck"]
     base = _precheck_base()
     paths = [str(base / p["path"]) for p in precheck["paths"]]
+    if step_def["id"] == "ros_setup":
+        ws_dir = resolved_ros_ws(state)
+        paths += [str(ws_dir / sub) for sub in ("build", "install", "log")]
     quoted = " ".join(shlex.quote(p) for p in paths)
     cmd = f'echo "Removing existing directories ({"mock sandbox" if MOCK else "real"})..."\nrm -rf -- {quoted}\necho "Removed existing directories."'
     return await start_command(f"{step_def['id']}__precheck", cmd)

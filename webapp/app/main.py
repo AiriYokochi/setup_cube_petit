@@ -411,7 +411,7 @@ async def resolve_precheck(step_id: str, body: PrecheckResolveBody):
     run_key = f"{step_id}__precheck"
     if engine.is_running(run_key):
         raise HTTPException(409, "cleanup is already running")
-    run = await engine.resolve_precheck(step_def, body.choice)
+    run = await engine.resolve_precheck(step_def, body.choice, state)
     asyncio.create_task(_watch_run(run_key, run))
     return {"status": "cleaning", "run_key": run_key}
 
@@ -442,6 +442,29 @@ async def run_step(step_id: str, body: RunBody = Body(default=RunBody())):
     run = await engine.run_step(step_def, inputs, state)
     asyncio.create_task(_watch_run(step_id, run))
     return {"status": "started", "run_key": step_id}
+
+
+@app.post("/api/steps/{step_id}/cancel")
+async def cancel_step(step_id: str):
+    step_def = _get_step_or_404(step_id)
+    if not engine.is_running(step_id):
+        raise HTTPException(400, "step is not running")
+
+    run = engine.get_run(step_id)
+    if run is not None:
+        run.broadcast("[中断] ユーザー操作によりこのステップを中断します...")
+    ok = await engine.cancel(step_id)
+    if not ok:
+        raise HTTPException(409, "failed to cancel (process already exited?)")
+
+    result = {"status": "cancelling"}
+    if step_def.get("needs_sudo"):
+        result["warning"] = (
+            "このステップはsudoで実行していました。中断してもroot権限で動いていた"
+            "処理(apt/dpkg等)は残っている場合があります。psやdpkgの状態を確認し、"
+            "必要なら `sudo dpkg --configure -a` を実行してください。"
+        )
+    return result
 
 
 @app.post("/api/steps/{step_id}/skip")

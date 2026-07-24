@@ -36,6 +36,8 @@ const STR = {
     run: "実行",
     run_again: "もう一度実行",
     skip: "スキップ",
+    cancel_run: "中断",
+    cancel_failed: (msg) => `中断に失敗しました: ${msg}`,
     reboot_ack: "確認しました(この後、機体を再起動してください)",
     rerun_note: "このステップの処理内容がアップデートで変わっています。「もう一度実行」で反映してください(再実行しても安全です)。",
     bt_none: "デバイスが見つかりませんでした。コントローラをペアリングモードにしてから、もう一度スキャンしてください。",
@@ -143,6 +145,8 @@ const STR = {
     run: "Run",
     run_again: "Run again",
     skip: "Skip",
+    cancel_run: "Stop",
+    cancel_failed: (msg) => `Failed to stop: ${msg}`,
     reboot_ack: "Got it (please reboot the robot after this)",
     rerun_note: "This step's behavior changed in an update. Press \"Run again\" to apply it (re-running is safe).",
     bt_none: "No devices found. Put the controller into pairing mode and scan again.",
@@ -1472,6 +1476,21 @@ function renderDetail(id) {
     });
     runBtn.disabled = running;
     actions.appendChild(runBtn);
+
+    if (running) {
+      const cancelBtn = mkButton("secondary", t("cancel_run"), async () => {
+        cancelBtn.disabled = true;
+        try {
+          const res = await api(`/api/steps/${id}/cancel`, { method: "POST" });
+          if (res.warning) alert(res.warning);
+          await loadState();
+        } catch (err) {
+          alert(t("cancel_failed", err.message));
+          cancelBtn.disabled = false;
+        }
+      });
+      actions.appendChild(cancelBtn);
+    }
 
     if (step.skippable && step.status !== "done") {
       const skipBtn = mkButton("secondary", t("skip"), async () => {
