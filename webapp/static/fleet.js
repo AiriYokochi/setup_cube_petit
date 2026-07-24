@@ -17,12 +17,13 @@ const STR = {
     empty: "fleet.yaml に機体が登録されていません。",
     load_error: "一覧を読み込めませんでした。",
     setup: "セットアップ",
-    update: "アップデート",
-    restart: "再起動",
+    update_restart: "アップデート&再起動",
     updating: "更新中...",
-    restarting: "再起動中...",
+    checking_update: "更新の確認中...",
+    cannot_check_update: "更新の確認に失敗しました(未接続の可能性があります)",
     latest: "最新です",
-    updated_ok: "更新しました",
+    available: "が利用可能です",
+    commits_behind: "件の更新があります",
     waiting_back: "起動待ち...",
     back_up: "起動しました",
     no_response: "応答がありません(時間をおいて確認してください)",
@@ -42,12 +43,13 @@ const STR = {
     empty: "No robots are registered in fleet.yaml.",
     load_error: "Could not load the fleet list.",
     setup: "Setup",
-    update: "Update",
-    restart: "Restart",
+    update_restart: "Update & restart",
     updating: "Updating...",
-    restarting: "Restarting...",
+    checking_update: "Checking for updates...",
+    cannot_check_update: "Could not check for updates (may be unreachable)",
     latest: "Already up to date",
-    updated_ok: "Updated",
+    available: " available",
+    commits_behind: " commit(s) behind",
     waiting_back: "Waiting for it to come back...",
     back_up: "Back up",
     no_response: "No response (check back in a bit)",
@@ -200,10 +202,15 @@ function makeCard(robot, ports) {
   return card;
 }
 
-// "アップデート"/"再起動" buttons: let Airi manage every robot's setup
-// webapp checkout from one page (/fleet) instead of SSHing into each one,
-// same operation as `git pull` + `systemctl --user restart
-// cube-petit-setup-webapp.service` done by hand.
+// "アップデート&再起動" button: lets Airi manage every robot's setup webapp
+// checkout from one page (/fleet) instead of SSHing into each one, same
+// operation as `git pull` + `systemctl --user restart
+// cube-petit-setup-webapp.service` done by hand. Single combined button
+// (not separate update/restart buttons) per her feedback: a standalone
+// "再起動" button reads as "restart the robot", not "restart this setup
+// app", and there is no reason to update without also restarting into the
+// new code. Disabled until a check confirms this robot's checkout is
+// actually behind -- there is nothing useful to press otherwise.
 function makeFleetActions(host, port) {
   const row = document.createElement("div");
   row.className = "fleet-actions";
@@ -212,24 +219,30 @@ function makeFleetActions(host, port) {
   status.className = "fleet-action-status";
 
   const pickErr = (r) => r.output || r.error || null;
-  const updateResultText = (r) => (r && r.updated ? t("updated_ok") : t("latest"));
 
-  const runAction = async (path, busyText) => {
-    row.querySelectorAll("button").forEach((b) => (b.disabled = true));
-    status.textContent = busyText;
+  const updateBtn = document.createElement("button");
+  updateBtn.type = "button";
+  updateBtn.className = "fleet-action-btn";
+  updateBtn.textContent = t("update_restart");
+  updateBtn.disabled = true;
+  updateBtn.title = t("checking_update");
+
+  updateBtn.addEventListener("click", async () => {
+    updateBtn.disabled = true;
+    status.textContent = t("updating");
     status.classList.remove("error");
     try {
-      const r = await crossApi(host, port, path, { method: "POST" });
+      const r = await crossApi(host, port, "/api/updates/self", { method: "POST" });
       if (r && r.restarting) {
         await waitForBackUp(host, port, status);
       } else if (r && r.ok === false) {
         status.textContent = pickErr(r) || t("action_failed");
         status.classList.add("error");
+        updateBtn.disabled = false;
       } else {
-        // /api/updates/self when nothing was pending returns {ok:true,
-        // updated:false}; /api/restart always sets restarting so never
-        // lands here. Anything else ok:true counts as a plain success.
-        status.textContent = r && "updated" in r ? updateResultText(r) : t("updated_ok");
+        // Nothing was actually pending after all (e.g. someone else just
+        // updated it) -- re-disable rather than leave a stale "latest".
+        status.textContent = t("latest");
       }
     } catch (err) {
       // The request may have failed simply because the process exited
@@ -241,28 +254,38 @@ function makeFleetActions(host, port) {
       } else {
         status.textContent = `${t("action_failed")}: ${err.message}`;
         status.classList.add("error");
+        updateBtn.disabled = false;
       }
-    } finally {
-      row.querySelectorAll("button").forEach((b) => (b.disabled = false));
     }
-  };
-
-  const updateBtn = document.createElement("button");
-  updateBtn.type = "button";
-  updateBtn.className = "fleet-action-btn";
-  updateBtn.textContent = t("update");
-  updateBtn.addEventListener("click", () => runAction("/api/updates/self", t("updating")));
-
-  const restartBtn = document.createElement("button");
-  restartBtn.type = "button";
-  restartBtn.className = "fleet-action-btn";
-  restartBtn.textContent = t("restart");
-  restartBtn.addEventListener("click", () => runAction("/api/restart", t("restarting")));
+  });
 
   row.appendChild(updateBtn);
-  row.appendChild(restartBtn);
   row.appendChild(status);
+  checkUpdateStatus(host, port, updateBtn, status);
   return row;
+}
+
+// Cross-origin GET /api/updates to decide whether the update button should
+// be clickable at all. Unreachable robots and robots already on the latest
+// code both leave it disabled.
+async function checkUpdateStatus(host, port, updateBtn, status) {
+  try {
+    const data = await crossApi(host, port, "/api/updates");
+    const self = data && data.self;
+    if (self && self.behind) {
+      updateBtn.disabled = false;
+      updateBtn.title = "";
+      status.textContent = updateHeadlineFor(self);
+    } else {
+      updateBtn.title = t("latest");
+    }
+  } catch (e) {
+    updateBtn.title = t("cannot_check_update");
+  }
+}
+
+function updateHeadlineFor(self) {
+  return self.tag ? `${self.tag}${t("available")}` : `${self.behind}${t("commits_behind")}`;
 }
 
 function probe(host, port, dot) {
