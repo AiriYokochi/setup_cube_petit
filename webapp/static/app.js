@@ -294,6 +294,7 @@ function setLang(l) {
   localStorage.setItem("cps_lang", l);
   applyStaticTexts();
   if (state.data) {
+    applyRobotNameBadge(); // re-applies the robot name onto the title applyStaticTexts() just reset
     renderStepList();
     if (state.selectedId) renderDetail(state.selectedId);
   }
@@ -330,8 +331,27 @@ async function loadState() {
   state.data = await api("/api/state");
   const badge = document.getElementById("mock-badge");
   badge.hidden = !state.data.mock;
+  applyRobotNameBadge();
   renderStepList();
   if (state.selectedId) renderDetail(state.selectedId);
+}
+
+// Several robots' setup pages can be open in adjacent tabs at once (via
+// /fleet), so both the tab title and the header need to make it obvious
+// which individual this particular tab is on. Hidden until robot_namespace
+// is actually set (early in the prereq step it's still the placeholder
+// "cube_petit_").
+function applyRobotNameBadge() {
+  const name = state.data.robot_namespace;
+  const badge = document.getElementById("robot-name-badge");
+  if (!name || name === "cube_petit_") {
+    badge.hidden = true;
+    document.title = t("app_title");
+    return;
+  }
+  badge.hidden = false;
+  badge.textContent = name;
+  document.title = `${t("app_title")} — ${name}`;
 }
 
 function findStep(id) {

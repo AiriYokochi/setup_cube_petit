@@ -43,6 +43,18 @@ body {
   border-radius: 999px;
 }
 
+/* Shows which individual (robot_namespace) this tab is set up on -- several
+   robots' setup pages can be open in adjacent tabs at once (via /fleet), so
+   this needs to be obvious at a glance. */
+.robot-name-badge {
+  font-size: 0.8rem;
+  font-weight: bold;
+  font-family: ui-monospace, monospace;
+  background: rgba(255,255,255,0.18);
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+}
+
 /* --- overall progress bar with a running cube petit ---------------------- */
 
 .progress-wrap {
