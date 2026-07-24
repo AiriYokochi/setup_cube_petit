@@ -36,7 +36,7 @@ echo -e '\e[1;31m == Grant passwordless sudo for cube_petit_setup scripts == \e[
 # Resolve absolute paths so the sudoers entries can't be bypassed by a PATH
 # trick, and so this doesn't silently no-op if a binary lives somewhere
 # unexpected on a given machine.
-BINS="apt apt-get dpkg add-apt-repository tee cp install chmod sed gpg curl grep usermod systemctl udevadm locale-gen update-locale rosdep make ldconfig nmcli sysctl"
+BINS="apt apt-get dpkg add-apt-repository tee cp install rm chmod sed gpg curl grep usermod systemctl udevadm locale-gen update-locale rosdep make ldconfig nmcli sysctl"
 CMD_LIST=""
 for b in $BINS; do
   # type -P (unlike command -v) only ever returns a real executable's path --
