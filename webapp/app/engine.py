@@ -13,6 +13,7 @@ running the real setup scripts here.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import shlex
@@ -296,21 +297,44 @@ def _build_claude_support_cmd(script_name: str, extra_env: dict) -> str:
 # this module. That sidesteps depending on the *system* python3 (the one
 # actually invoked, once _child_env() strips the venv) having PyYAML too.
 
-_PERSONALITY_FIELDS = [
+_PERSONALITY_TEXT_FIELDS = [
     "color", "personality", "nick_name", "dream", "favorite_fruit",
-    "favorite", "friends", "first_person_pronoun", "end_talk", "sample_talk",
+    "favorite", "first_person_pronoun", "end_talk", "sample_talk",
 ]
+# friends is handled separately from the plain-text fields above: it is a
+# list (see _normalize_friends()), not a string.
+_PERSONALITY_FIELDS = _PERSONALITY_TEXT_FIELDS + ["friends"]
 
 # (field id -> default). Also defines voice.yaml's field order.
+#
+# Value domains below match cube_petit_text_to_speech's *actual* validator
+# (jtalk.py's check_goal()), not the numbers this module used to declare
+# (0-999 etc., which were simply wrong -- nobody had noticed because nothing
+# reads these files yet). See _VOICE_INT_BOUNDS and VALID_SPEECH_EMOTIONS.
 _VOICE_DEFAULTS: dict[str, object] = {
     "language": "ja",
-    "speech_emotion": "happiness",
+    "speech_emotion": "normal",
     "speech_emotion_level": 2,
     "speech_pitch": 100,
     "speech_speed": 100,
     "speech_volume": 100,
 }
 _VOICE_INT_FIELDS = {"speech_emotion_level", "speech_pitch", "speech_speed", "speech_volume"}
+
+# (field id -> (min, max)), inclusive on both ends. Mirrors jtalk.py's
+# check_goal(): emotion_level 1-5, pitch 50-199, speed 50-299, volume 1-100.
+# cube_petit_speech_msgs/action/Speech.action's EMOTION_* string constants
+# (happiness/default/anger/shout/sadness) do NOT match what check_goal()
+# actually accepts -- that mismatch looks like a pre-existing bug in that
+# separate repo, out of scope here; this webapp targets the validator that
+# is actually enforced (jtalk.py), see VALID_SPEECH_EMOTIONS below.
+_VOICE_INT_BOUNDS: dict[str, tuple[int, int]] = {
+    "speech_emotion_level": (1, 5),
+    "speech_pitch": (50, 199),
+    "speech_speed": (50, 299),
+    "speech_volume": (1, 100),
+}
+VALID_SPEECH_EMOTIONS = {"happy", "normal", "angry", "bashful", "sad"}
 
 
 def personality_config_dir(state: dict) -> Path:
@@ -321,20 +345,50 @@ def personality_config_dir(state: dict) -> Path:
     return base / ".cube_petit" / ns
 
 
-def _build_personality_cmd(inputs: dict, state: dict) -> str:
-    config_dir = personality_config_dir(state)
+def _normalize_friends(raw: object) -> list[str]:
+    """personality.yaml's `friends` field used to be a single free-text
+    string; the wizard now supports any number of entries (steps.yaml's
+    friends input is type: text_list). Accepts either shape coming in
+    (a fresh list from the frontend, or a legacy string already saved on
+    disk/state.json) and always returns a list, dropping blank entries."""
+    if isinstance(raw, str):
+        raw = [raw]
+    elif not isinstance(raw, list):
+        raw = []
+    return [s for s in (str(v).strip() for v in raw) if s]
 
-    personality = {k: str(inputs.get(k) or "") for k in _PERSONALITY_FIELDS}
+
+def _clamp_int(raw: object, lo: int, hi: int, default: int) -> int:
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, value))
+
+
+def _build_voice_dict(inputs: dict) -> dict[str, object]:
+    """voice.yaml contents from raw (possibly missing/invalid/out-of-range)
+    input values -- always clamped into the domain jtalk.py's check_goal()
+    actually accepts, so a saved voice.yaml is guaranteed speakable."""
     voice: dict[str, object] = {}
     for key, default in _VOICE_DEFAULTS.items():
         raw = inputs.get(key)
         if key in _VOICE_INT_FIELDS:
-            try:
-                voice[key] = int(raw)
-            except (TypeError, ValueError):
-                voice[key] = default
+            lo, hi = _VOICE_INT_BOUNDS[key]
+            voice[key] = _clamp_int(raw, lo, hi, default)
+        elif key == "speech_emotion":
+            voice[key] = str(raw) if raw in VALID_SPEECH_EMOTIONS else default
         else:
             voice[key] = str(raw) if raw else default
+    return voice
+
+
+def _build_personality_cmd(inputs: dict, state: dict) -> str:
+    config_dir = personality_config_dir(state)
+
+    personality: dict[str, object] = {k: str(inputs.get(k) or "") for k in _PERSONALITY_TEXT_FIELDS}
+    personality["friends"] = _normalize_friends(inputs.get("friends"))
+    voice = _build_voice_dict(inputs)
 
     personality_text = yaml.safe_dump(personality, allow_unicode=True, sort_keys=False)
     voice_text = yaml.safe_dump(voice, allow_unicode=True, sort_keys=False)
@@ -350,6 +404,193 @@ def _build_personality_cmd(inputs: dict, state: dict) -> str:
         f"echo {shlex.quote(f'Wrote {voice_path}')}",
     ]
     return "\n".join(lines)
+
+
+def read_saved_personality(state: dict) -> Optional[dict]:
+    """~/.cube_petit/<ns>/personality.yaml, if it exists, with the legacy
+    single-string `friends` field normalized into a list. Returns None (not
+    {}) when the file is missing/unparseable, so callers can tell "nothing
+    saved yet" apart from "saved as an empty file"."""
+    path = personality_config_dir(state) / "personality.yaml"
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    data["friends"] = _normalize_friends(data.get("friends"))
+    return data
+
+
+def read_saved_voice(state: dict) -> Optional[dict]:
+    """~/.cube_petit/<ns>/voice.yaml, if it exists. No normalization needed
+    here (unlike personality.yaml's friends) -- see read_saved_personality()."""
+    path = personality_config_dir(state) / "voice.yaml"
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+# --- speech test-play (step 12's "▶ 再生" button) ---------------------------
+#
+# The only place in this webapp that hands user-influenced data to a real
+# ROS action goal, so unlike every other command in this module it does NOT
+# go through start_command()'s create_subprocess_shell (that path exists to
+# stream long-running setup scripts, and building a shell string out of
+# speech text would mean shell-quoting arbitrary user input). Instead this
+# runs `ros2 action send_goal` via create_subprocess_exec with a plain argv
+# list -- no shell in between at all, so there is nothing to inject into
+# regardless of what the text/emotion fields contain. The values are still
+# clamped into the valid domain first (see _build_voice_dict/_clamp_int)
+# purely so the action server doesn't just reject an out-of-range goal.
+
+TEST_SPEECH_TEXT = "テストです。こんにちは、キューブプチだよ。よろしくね。"
+_SPEECH_TEST_TIMEOUT = 15  # seconds, overall wall-clock budget for the whole call
+_SPEECH_TEST_ROS2_TIMEOUT = 12  # seconds, passed to `ros2 action send_goal -t`
+
+_SPEECH_SERVER_NOT_RUNNING_JA = "この機体でロボットのプログラムが起動していないため再生できません。"
+_SPEECH_SERVER_NOT_RUNNING_EN = "Playback failed: this robot's software does not seem to be running."
+_ROS2_NOT_FOUND_JA = "この機体に ros2 コマンドが見つかりませんでした(ROSのセットアップが完了していない可能性があります)。"
+_ROS2_NOT_FOUND_EN = "Could not find the ros2 command on this robot (ROS setup may not be complete)."
+
+
+def clamp_voice_inputs(
+    emotion: object, emotion_level: object, pitch: object, speed: object, volume: object,
+) -> dict[str, object]:
+    """Validate/clamp raw test-speech request values into the domain
+    jtalk.py's check_goal() actually accepts. Shared by _build_voice_dict()'s
+    save path and run_test_speech() below so both agree on one source of
+    truth for what's valid."""
+    return _build_voice_dict({
+        "speech_emotion": emotion,
+        "speech_emotion_level": emotion_level,
+        "speech_pitch": pitch,
+        "speech_speed": speed,
+        "speech_volume": volume,
+    })
+
+
+async def _ros_exec_env(state: dict) -> dict:
+    """Environment for exec()-ing a real `ros2` binary directly (no shell)
+    against this robot's installed workspace: /opt/ros/jazzy's setup.bash
+    plus the resolved workspace's install/setup.bash (see resolved_ros_ws()),
+    captured by sourcing them in a short-lived helper shell and reading the
+    result back as JSON. That helper shell embeds no user input -- only
+    fixed paths already used elsewhere (mapshare.py's _source_ros_lines
+    does the equivalent sourcing for its own ros2 invocations, but stays
+    inside one shell end-to-end since it never handles free-text goal
+    content; test_speech can't reuse that shape, see the module comment
+    above)."""
+    ws_setup = resolved_ros_ws(state) / "install" / "setup.bash"
+    script = "\n".join([
+        "source /opt/ros/jazzy/setup.bash 2>/dev/null",
+        f"if [ -f {shlex.quote(str(ws_setup))} ]; then source {shlex.quote(str(ws_setup))}; fi",
+        "python3 -c \"import json, os, sys; sys.stdout.write(json.dumps(dict(os.environ)))\"",
+    ])
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            env=_child_env(),
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+    except (OSError, asyncio.TimeoutError):
+        return _child_env()
+    if proc.returncode != 0 or not out:
+        return _child_env()
+    try:
+        return json.loads(out.decode())
+    except (ValueError, UnicodeDecodeError):
+        return _child_env()
+
+
+async def run_test_speech(inputs: dict, state: dict) -> dict:
+    """POST /api/personality/test_speech backend: speaks TEST_SPEECH_TEXT
+    through the real speech_action_server, using whatever emotion/pitch/
+    speed/volume are currently in the form (not necessarily saved yet).
+    Returns {"ok": bool, "message": str} -- "the robot isn't running" is an
+    expected, recoverable outcome for a non-engineer pressing this button
+    before starting the robot software, not something to raise/500 on."""
+    values = clamp_voice_inputs(
+        inputs.get("emotion"), inputs.get("emotion_level"),
+        inputs.get("pitch"), inputs.get("speed"), inputs.get("volume"),
+    )
+
+    if MOCK:
+        await asyncio.sleep(0.5)
+        return {
+            "ok": True,
+            "message": (
+                f"[mock] 「{TEST_SPEECH_TEXT}」を emotion={values['speech_emotion']} "
+                f"level={values['speech_emotion_level']} pitch={values['speech_pitch']} "
+                f"speed={values['speech_speed']} volume={values['speech_volume']} で"
+                "再生しました(疑似)。"
+            ),
+        }
+
+    ns = state.get("robot_namespace") or ""
+    action_name = f"/{ns}/speech_action_server" if ns else "/speech_action_server"
+    goal = {
+        "text": TEST_SPEECH_TEXT,
+        "emotion": values["speech_emotion"],
+        "emotion_level": values["speech_emotion_level"],
+        "pitch": values["speech_pitch"],
+        "speed": values["speech_speed"],
+        "volume": values["speech_volume"],
+    }
+    # json.dumps() output is valid YAML (JSON is a YAML subset), which is
+    # what `ros2 action send_goal` parses its goal argument as -- and since
+    # this whole argv is exec()'d with no shell, no further quoting of the
+    # (possibly Japanese-text-containing) goal string is needed or possible.
+    argv = [
+        "ros2", "action", "send_goal", "-t", str(_SPEECH_TEST_ROS2_TIMEOUT),
+        action_name, "cube_petit_speech_msgs/action/Speech",
+        json.dumps(goal, ensure_ascii=False),
+    ]
+
+    env = await _ros_exec_env(state)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            env=env,
+            start_new_session=True,
+        )
+    except FileNotFoundError:
+        return {"ok": False, "message": _ROS2_NOT_FOUND_JA, "message_en": _ROS2_NOT_FOUND_EN}
+
+    try:
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=_SPEECH_TEST_TIMEOUT)
+    except asyncio.TimeoutError:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        return {
+            "ok": False,
+            "message": _SPEECH_SERVER_NOT_RUNNING_JA,
+            "message_en": _SPEECH_SERVER_NOT_RUNNING_EN,
+        }
+
+    text = out.decode(errors="replace")
+    if proc.returncode == 0 and "Goal accepted" in text:
+        return {"ok": True, "message": "再生しました。", "message_en": "Played."}
+    if "not available" in text or proc.returncode != 0:
+        return {
+            "ok": False,
+            "message": _SPEECH_SERVER_NOT_RUNNING_JA,
+            "message_en": _SPEECH_SERVER_NOT_RUNNING_EN,
+        }
+    excerpt = text.strip()[-300:]
+    return {
+        "ok": False,
+        "message": f"再生に失敗しました: {excerpt}",
+        "message_en": f"Playback failed: {excerpt}",
+    }
 
 
 async def connect_repo(ws_dir: str, repo_url: str) -> dict:

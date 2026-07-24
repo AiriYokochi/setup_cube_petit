@@ -130,6 +130,12 @@ const STR = {
     report_trimmed: "(長いため以降を省略)",
     notice_none: "✅ アップデート完了。再実行が必要なステップはありません。これで完了です。",
     notice_some: "✅ アップデート完了。このアップデートで再実行が必要なステップ:",
+    template_select_blank: "テンプレートを選択...",
+    text_list_add: "+ 追加",
+    text_list_remove: "削除",
+    speech_test_play: "▶ 再生",
+    speech_test_playing: "再生中...",
+    speech_test_failed: (msg) => `再生できませんでした: ${msg}`,
   },
   en: {
     app_title: "Cube Petit Setup",
@@ -244,6 +250,12 @@ const STR = {
     report_trimmed: "(trimmed for length)",
     notice_none: "✅ Update complete. No steps need a re-run — you're all set.",
     notice_some: "✅ Update complete. Steps that need a re-run after this update:",
+    template_select_blank: "Choose a template...",
+    text_list_add: "+ Add",
+    text_list_remove: "Remove",
+    speech_test_play: "▶ Play",
+    speech_test_playing: "Playing...",
+    speech_test_failed: (msg) => `Could not play: ${msg}`,
   },
 };
 
@@ -1469,6 +1481,11 @@ function renderDetail(id) {
   const savedInputs = (state.data.inputs && state.data.inputs[id]) || {};
   const formGetters = {};
   const boolRows = {}; // detect_cmd inputs only, for applyInstalledInfo()
+  // Populated as plain-text fields render, so a template_select rendered
+  // earlier in the same step (see steps.yaml's personality step) can still
+  // reach every sibling text input by id once the user actually picks a
+  // template -- by then the whole loop below has already run once.
+  const textInputEls = {};
   (step.inputs || []).forEach((inputDef) => {
     const row = document.createElement("div");
     row.className = "input-row" + (inputDef.type === "bool" ? " bool" : "");
@@ -1550,6 +1567,161 @@ function renderDetail(id) {
         row.appendChild(help);
       }
       formGetters[inputDef.id] = () => hexInput.value.trim();
+    } else if (inputDef.type === "template_select") {
+      // Convenience widget only: it fills in sibling text fields (by id, via
+      // textInputEls) but has no formGetters entry of its own -- the choice
+      // itself is never saved (see steps.yaml's help text on this input).
+      row.appendChild(label);
+      const select = document.createElement("select");
+      select.className = "template-select";
+      const blankOpt = document.createElement("option");
+      blankOpt.value = "";
+      blankOpt.textContent = t("template_select_blank");
+      select.appendChild(blankOpt);
+      (inputDef.options || []).forEach((opt) => {
+        const o = document.createElement("option");
+        o.value = opt.id;
+        o.textContent = L(opt, "label") || opt.id;
+        select.appendChild(o);
+      });
+      select.addEventListener("change", () => {
+        const chosen = (inputDef.options || []).find((opt) => opt.id === select.value);
+        if (chosen && chosen.values) {
+          Object.entries(chosen.values).forEach(([fieldId, val]) => {
+            const target = textInputEls[fieldId];
+            if (target) target.value = val;
+          });
+        }
+        // Reset to the blank option: this is a "apply these example values
+        // now" action, not a persistent choice the fields stay tied to --
+        // the user is expected to freely edit from here.
+        select.value = "";
+      });
+      row.appendChild(select);
+      if (inputDef.help_ja || inputDef.help_en) {
+        const help = document.createElement("div");
+        help.className = "help";
+        help.textContent = L(inputDef, "help");
+        row.appendChild(help);
+      }
+    } else if (inputDef.type === "select") {
+      row.appendChild(label);
+      const select = document.createElement("select");
+      (inputDef.options || []).forEach((opt) => {
+        const o = document.createElement("option");
+        o.value = opt.id;
+        o.textContent = L(opt, "label") || opt.id;
+        select.appendChild(o);
+      });
+      select.value = savedInputs[inputDef.id] ?? inputDef.default ?? (inputDef.options?.[0]?.id ?? "");
+      row.appendChild(select);
+      if (inputDef.help_ja || inputDef.help_en) {
+        const help = document.createElement("div");
+        help.className = "help";
+        help.textContent = L(inputDef, "help");
+        row.appendChild(help);
+      }
+      formGetters[inputDef.id] = () => select.value;
+    } else if (inputDef.type === "slider") {
+      row.appendChild(label);
+      const wrap = document.createElement("div");
+      wrap.className = "slider-row";
+      const min = inputDef.min ?? 0;
+      const max = inputDef.max ?? 100;
+      const step = inputDef.step ?? 1;
+      const clamp = (v) => Math.min(max, Math.max(min, v));
+      const initial = clamp(Number(savedInputs[inputDef.id] ?? inputDef.default ?? min));
+
+      const range = document.createElement("input");
+      range.type = "range";
+      range.min = min;
+      range.max = max;
+      range.step = step;
+      range.value = initial;
+
+      const number = document.createElement("input");
+      number.type = "number";
+      number.className = "slider-number";
+      number.min = min;
+      number.max = max;
+      number.step = step;
+      number.value = initial;
+
+      // Same bidirectional-sync idea as the color input's hexInput <->
+      // native picker above: range drives number, number drives range, and
+      // the number field only gets clamped/rewritten on blur/"change" so the
+      // user can freely type/backspace mid-edit without the field fighting
+      // them.
+      range.addEventListener("input", () => { number.value = range.value; });
+      number.addEventListener("input", () => {
+        const v = Number(number.value);
+        if (!Number.isNaN(v)) range.value = clamp(v);
+      });
+      number.addEventListener("change", () => {
+        const v = Number(number.value);
+        number.value = Number.isNaN(v) ? initial : clamp(v);
+        range.value = number.value;
+      });
+
+      wrap.appendChild(range);
+      wrap.appendChild(number);
+      row.appendChild(wrap);
+      if (inputDef.help_ja || inputDef.help_en) {
+        const help = document.createElement("div");
+        help.className = "help";
+        help.textContent = L(inputDef, "help");
+        row.appendChild(help);
+      }
+      formGetters[inputDef.id] = () => Number(number.value);
+    } else if (inputDef.type === "text_list") {
+      row.appendChild(label);
+      const listWrap = document.createElement("div");
+      listWrap.className = "text-list";
+      const itemInputs = [];
+
+      const addItem = (value) => {
+        const itemRow = document.createElement("div");
+        itemRow.className = "text-list-item";
+        const input = document.createElement("input");
+        input.type = "text";
+        input.placeholder = inputDef.placeholder || "";
+        input.value = value || "";
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "text-list-remove";
+        removeBtn.textContent = t("text_list_remove");
+        removeBtn.addEventListener("click", () => {
+          itemRow.remove();
+          const idx = itemInputs.indexOf(input);
+          if (idx !== -1) itemInputs.splice(idx, 1);
+        });
+        itemRow.appendChild(input);
+        itemRow.appendChild(removeBtn);
+        listWrap.appendChild(itemRow);
+        itemInputs.push(input);
+      };
+
+      const savedList = Array.isArray(savedInputs[inputDef.id])
+        ? savedInputs[inputDef.id]
+        : (Array.isArray(inputDef.default) ? inputDef.default : []);
+      (savedList.length ? savedList : [""]).forEach(addItem);
+
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "text-list-add";
+      addBtn.textContent = t("text_list_add");
+      addBtn.addEventListener("click", () => addItem(""));
+
+      row.appendChild(listWrap);
+      row.appendChild(addBtn);
+      if (inputDef.help_ja || inputDef.help_en) {
+        const help = document.createElement("div");
+        help.className = "help";
+        help.textContent = L(inputDef, "help");
+        row.appendChild(help);
+      }
+      formGetters[inputDef.id] = () =>
+        itemInputs.map((inp) => inp.value.trim()).filter((v) => v);
     } else {
       row.appendChild(label);
       const input = document.createElement("input");
@@ -1564,9 +1736,42 @@ function renderDetail(id) {
         row.appendChild(help);
       }
       formGetters[inputDef.id] = () => input.value;
+      textInputEls[inputDef.id] = input;
     }
     el.appendChild(row);
   });
+
+  // Speech test-play ("▶ 再生"): only on the personality step, and only
+  // wired up once its emotion/pitch/speed/volume sliders exist in
+  // formGetters above -- speaks the current (possibly unsaved) form values
+  // via POST /api/personality/test_speech, see engine.run_test_speech().
+  if (id === "personality") {
+    const testRow = document.createElement("div");
+    testRow.className = "speech-test-row";
+    const playBtn = mkButton("secondary", t("speech_test_play"), async () => {
+      const original = playBtn.textContent;
+      playBtn.disabled = true;
+      playBtn.textContent = t("speech_test_playing");
+      try {
+        const body = {
+          emotion: formGetters.speech_emotion ? formGetters.speech_emotion() : undefined,
+          emotion_level: formGetters.speech_emotion_level ? formGetters.speech_emotion_level() : undefined,
+          pitch: formGetters.speech_pitch ? formGetters.speech_pitch() : undefined,
+          speed: formGetters.speech_speed ? formGetters.speech_speed() : undefined,
+          volume: formGetters.speech_volume ? formGetters.speech_volume() : undefined,
+        };
+        const res = await api("/api/personality/test_speech", { method: "POST", body });
+        if (!res.ok) alert(pickMsg(res));
+      } catch (err) {
+        alert(t("speech_test_failed", err.message));
+      } finally {
+        playBtn.disabled = false;
+        playBtn.textContent = original;
+      }
+    });
+    testRow.appendChild(playBtn);
+    el.appendChild(testRow);
+  }
 
   const precheckContainer = document.createElement("div");
   el.appendChild(precheckContainer);

@@ -335,6 +335,55 @@ body {
 }
 .color-hex-input { max-width: 10rem; }
 
+/* --- personality step: template picker, editable friends list, sliders --- */
+
+.template-select, .input-row select {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 1rem;
+  background: #fff;
+  max-width: 20rem;
+}
+
+.text-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.text-list-item { display: flex; align-items: center; gap: 0.5rem; }
+.text-list-item input[type="text"] { flex: 1; }
+.text-list-remove {
+  flex: none;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--fail);
+  cursor: pointer;
+}
+.text-list-add {
+  align-self: flex-start;
+  margin-top: 0.3rem;
+  padding: 0.35rem 0.8rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.slider-row { display: flex; align-items: center; gap: 0.8rem; }
+.slider-row input[type="range"] { flex: 1; }
+.slider-number {
+  width: 4.5rem;
+  flex: none;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 1rem;
+  text-align: right;
+}
+
+.speech-test-row { margin: 1rem 0; }
+.speech-test-row .help { font-size: 0.82rem; color: var(--muted); margin-top: 0.3rem; }
+
 .actions {
   display: flex;
   gap: 0.6rem;
@@ -613,6 +662,11 @@ details.manual-fallback > summary { cursor: pointer; font-size: 0.9rem; color: v
   .update-banner, .step-badge { background: #3a2c17; color: #fdba74; border-color: #7c4a12; }
   .update-banner summary { background: transparent; }
   .post-update-notice { background: #14261a; color: #86efac; border-color: #166534; }
+  .template-select, .input-row select,
+  .text-list-remove, .text-list-add, .slider-number {
+    background: #242830;
+    color: var(--text);
+  }
 }
 
 /* --- bug report ("不具合を報告") ------------------------------------------- */
