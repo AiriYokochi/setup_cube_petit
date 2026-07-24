@@ -35,6 +35,12 @@ STEPS_BY_ID: dict[str, dict] = {s["id"]: s for s in STEPS}
 # section -- kept as data so it can be edited without touching this file.
 COMPLETION: dict = _STEPS_YAML.get("completion", {})
 
+# Face color palette (config/face_colors.yaml): data, not code, so a new
+# color needs no change here -- see the file's own header comment and the
+# prereq step's face_color input in steps.yaml.
+with open(engine.REPO_ROOT / "config" / "face_colors.yaml", encoding="utf-8") as f:
+    FACE_COLORS: list[dict] = (yaml.safe_load(f) or {}).get("colors", [])
+
 app = FastAPI(title="cube_petit_setup webapp")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -269,6 +275,32 @@ def _env_setup_inputs(state: dict, input_defs: list[dict]) -> list[dict]:
     return out
 
 
+def _suggested_face_color(robot_namespace: Optional[str]) -> str:
+    """Best-effort default for the face_color input: if the robot name's
+    suffix (after cube_petit_) matches one of the palette's ids (e.g.
+    cube_petit_orange -> "orange"), pre-select that swatch's hex. Otherwise
+    leave it blank -- there is no safe generic default color to guess, unlike
+    ROS_DOMAIN_ID above."""
+    if not robot_namespace:
+        return ""
+    suffix = robot_namespace.removeprefix("cube_petit_")
+    for c in FACE_COLORS:
+        if c["id"] == suffix:
+            return c["hex"]
+    return ""
+
+
+def _prereq_inputs(state: dict, input_defs: list[dict]) -> list[dict]:
+    """prereq's input definitions with the face_color input's palette
+    (config/face_colors.yaml) and per-robot suggested default attached."""
+    out = []
+    for d in input_defs:
+        if d["id"] == "face_color":
+            d = {**d, "options": FACE_COLORS, "default": _suggested_face_color(state.get("robot_namespace"))}
+        out.append(d)
+    return out
+
+
 # --- pages ---------------------------------------------------------------
 
 @app.get("/")
@@ -317,10 +349,13 @@ async def get_state():
         }
         if step_def["id"] == "env_setup":
             step_out["inputs"] = _env_setup_inputs(state, step_def.get("inputs", []))
+        elif step_def["id"] == "prereq":
+            step_out["inputs"] = _prereq_inputs(state, step_def.get("inputs", []))
         steps_out.append(step_out)
     all_done = bool(steps_out) and all(s["status"] in ("done", "skipped") for s in steps_out)
     return {
         "robot_namespace": state.get("robot_namespace"),
+        "face_color": state.get("face_color"),
         "awaiting_reboot": state.get("awaiting_reboot", False),
         "inputs": state.get("inputs", {}),
         "steps": steps_out,
@@ -344,7 +379,10 @@ async def save_inputs(step_id: str, body: InputsBody):
         if d.get("required") and not value:
             raise HTTPException(400, _pick(
                 lang, f"「{label}」を入力してください", f'Please fill in "{label}".'))
-        if d.get("type") == "text" and d.get("pattern") and value:
+        # Pattern validation applies to any input type that declares one
+        # (originally text-only; the "color" input type re-uses it to
+        # enforce "#RRGGBB" for both palette picks and free-typed hex).
+        if d.get("pattern") and value:
             if not re.match(d["pattern"], str(value)):
                 err = (d.get("error_en") if lang == "en" else None) or d.get("error_ja")
                 raise HTTPException(
@@ -358,6 +396,12 @@ async def save_inputs(step_id: str, body: InputsBody):
     state["inputs"].setdefault(step_id, {}).update(body.inputs)
     if step_id == "prereq" and "robot_namespace" in body.inputs:
         state["robot_namespace"] = body.inputs["robot_namespace"]
+    if step_id == "prereq" and "face_color" in body.inputs:
+        # Promoted to top-level state (like robot_namespace above) so later
+        # steps (env_setup, autostart) can read the chosen color without
+        # reaching into another step's saved inputs -- see
+        # engine._extra_env_for().
+        state["face_color"] = body.inputs["face_color"]
     state_mod.save_state(state)
     return {"status": "saved"}
 

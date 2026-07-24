@@ -722,6 +722,13 @@ def _extra_env_for(step_id: str, state: dict, inputs: dict) -> dict:
         api_key = inputs.get("openai_api_key")
         if api_key:
             env["OPENAI_API_KEY"] = str(api_key)
+        # Chosen in the prereq step (state["face_color"], a resolved hex
+        # code). Threaded through so the 01_BRING alias this script writes
+        # launches with the user's choice instead of cube_petit_bringup's
+        # own hostname-derived default -- see setup_bashrc.bash.
+        face_color = state.get("face_color")
+        if face_color:
+            env["FACE_COLOR"] = str(face_color)
         return env
     if step_id == "claude_support":
         return {"ROBOT_NAMESPACE": state.get("robot_namespace") or ""}
@@ -735,6 +742,12 @@ def _extra_env_for(step_id: str, state: dict, inputs: dict) -> dict:
             "ROBOT_NAMESPACE": state.get("robot_namespace") or "",
             "ROS_DOMAIN_ID": str(env_inputs.get("ros_domain_id") or "94"),
         }
+        # Same chosen face color as env_setup above, baked into the systemd
+        # launcher script (see setup_autostart.bash) so autostart boots with
+        # the user's choice too, not cube_petit_bringup's own default.
+        face_color = state.get("face_color")
+        if face_color:
+            env["FACE_COLOR"] = str(face_color)
         env.update(ros_ws_env(state))
         return env
     return {}

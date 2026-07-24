@@ -16,7 +16,11 @@
 #
 # Required env: AUTOSTART_ENABLED ("true"/"false")
 # Required env when enabling: ROBOT_NAMESPACE
-# Optional env: ROS_DOMAIN_ID (default 94), CUBE_PETIT_ROS_WS (default ~/ros)
+# Optional env: ROS_DOMAIN_ID (default 94), CUBE_PETIT_ROS_WS (default ~/ros),
+#   FACE_COLOR (hex code, e.g. #ffa500 -- chosen in the setup wizard's
+#   prereq step; baked into the generated launcher so autostart boots with
+#   the user's choice instead of cube_petit_bringup's own hostname-derived
+#   default. See cube_petit_bringup.launch.py's face_color argument.)
 set -e
 
 : "${AUTOSTART_ENABLED:?AUTOSTART_ENABLED is required (true/false)}"
@@ -27,6 +31,14 @@ SERVICE_PATH="$SERVICE_DIR/$SERVICE_NAME"
 LAUNCHER="$HOME/.local/bin/cube_petit_bringup_launch.sh"
 ROS_WS="${CUBE_PETIT_ROS_WS:-$HOME/ros}"
 ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-94}"
+
+# face_color:=<hex> only when the wizard has a chosen color to bake in --
+# otherwise leave the launch command as-is and let
+# cube_petit_bringup.launch.py fall back to its own default.
+BRING_FACE_COLOR_ARG=""
+if [ -n "${FACE_COLOR:-}" ]; then
+  BRING_FACE_COLOR_ARG=" face_color:=${FACE_COLOR}"
+fi
 
 if [ "$AUTOSTART_ENABLED" != "true" ]; then
   echo -e '\e[1;31m == Disable robot autostart == \e[m'
@@ -66,10 +78,10 @@ fi
 export ROS_DOMAIN_ID=$ROS_DOMAIN_ID
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI=file://\$HOME/cyclonedds.xml
-exec ros2 launch cube_petit_bringup cube_petit_bringup.launch.py
+exec ros2 launch cube_petit_bringup cube_petit_bringup.launch.py${BRING_FACE_COLOR_ARG}
 EOF
 chmod +x "$LAUNCHER"
-echo "Wrote $LAUNCHER (namespace: $ROBOT_NAMESPACE, ROS_DOMAIN_ID: $ROS_DOMAIN_ID, workspace: $ROS_WS)"
+echo "Wrote $LAUNCHER (namespace: $ROBOT_NAMESPACE, ROS_DOMAIN_ID: $ROS_DOMAIN_ID, workspace: $ROS_WS, face_color: ${FACE_COLOR:-<default>})"
 
 cat >"$SERVICE_PATH" <<EOF
 [Unit]

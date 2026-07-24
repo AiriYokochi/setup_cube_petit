@@ -9,7 +9,11 @@
 # only overwrites ~/cyclonedds.xml if its content actually changed.
 #
 # Required env: ROBOT_NAMESPACE, ROS_DOMAIN_ID
-# Optional env: OPENAI_API_KEY
+# Optional env: OPENAI_API_KEY, FACE_COLOR (hex code, e.g. #ffa500 -- chosen
+#   in the setup wizard's prereq step; baked into the 01_BRING alias below so
+#   a manual launch also uses it instead of cube_petit_bringup's own
+#   hostname-derived default. See cube_petit_bringup.launch.py's face_color
+#   argument and cube_petit_facial_animation/animation.py.)
 set -e
 
 : "${ROBOT_NAMESPACE:?ROBOT_NAMESPACE is required (e.g. cube_petit_yellow)}"
@@ -45,6 +49,14 @@ else
   OPENAI_LINE='# export OPENAI_API_KEY="sk-..."  # 会話機能を使うとき設定'
 fi
 
+# face_color:=<hex> only when the wizard has a chosen color to bake in --
+# otherwise leave 01_BRING as-is and let cube_petit_bringup.launch.py fall
+# back to its own default.
+BRING_FACE_COLOR_ARG=""
+if [ -n "${FACE_COLOR:-}" ]; then
+  BRING_FACE_COLOR_ARG=" face_color:=${FACE_COLOR}"
+fi
+
 touch "$BASHRC"
 if grep -qF "$MARK_START" "$BASHRC"; then
   sed -i "/^${MARK_START}\$/,/^${MARK_END}\$/d" "$BASHRC"
@@ -58,7 +70,7 @@ export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI=file://\$HOME/cyclonedds.xml
 ${OPENAI_LINE}
 
-alias 01_BRING="ros2 launch cube_petit_bringup cube_petit_bringup.launch.py"
+alias 01_BRING="ros2 launch cube_petit_bringup cube_petit_bringup.launch.py${BRING_FACE_COLOR_ARG}"
 alias 02_DEMO="ros2 launch cube_petit_scenario cube_petit_talk_demo.launch.py"
 alias 04_TALK_START="ros2 service call /${ROBOT_NAMESPACE}/enable_realtime_conversation std_srvs/srv/SetBool \"data: true\""
 alias 04_TALK_FINISH="ros2 service call /${ROBOT_NAMESPACE}/enable_realtime_conversation std_srvs/srv/SetBool \"data: false\""
