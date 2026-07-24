@@ -126,6 +126,29 @@ body {
   background: var(--accent);
   color: var(--accent-contrast);
 }
+.fleet-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.fleet-action-btn {
+  border: 1px solid var(--border);
+  background: var(--panel-bg);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.fleet-action-btn:hover:not(:disabled) { border-color: var(--accent); }
+.fleet-action-btn:disabled { opacity: 0.5; cursor: default; }
+.fleet-action-status {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.fleet-action-status.error { color: #dc2626; }
+
 .fleet-loading, .fleet-footnote {
   color: var(--muted);
   font-size: 0.85rem;

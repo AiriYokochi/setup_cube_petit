@@ -1508,11 +1508,25 @@ function renderDetail(id) {
       hexInput.className = "color-hex-input";
       hexInput.placeholder = "#RRGGBB";
       hexInput.value = savedInputs[inputDef.id] ?? inputDef.default ?? "";
+      // Native OS/browser color picker -- lets non-engineers pick a color
+      // by eye (wheel/sliders) instead of typing hex or being limited to
+      // the fixed palette below. <input type=color> always holds a valid
+      // 6-digit hex, so it's the one control that never needs isHex().
+      const nativePicker = document.createElement("input");
+      nativePicker.type = "color";
+      nativePicker.className = "color-native-picker";
+      nativePicker.title = L(inputDef, "label") || "";
+      nativePicker.value = isHexInit(hexInput.value) ? hexInput.value : "#e8830c";
+
+      function isHexInit(v) {
+        return /^#[0-9a-fA-F]{6}$/.test(v);
+      }
 
       const isHex = (v) => /^#[0-9a-fA-F]{6}$/.test(v);
       const sync = () => {
         const v = hexInput.value.trim();
         preview.style.background = isHex(v) ? v : "transparent";
+        if (isHex(v)) nativePicker.value = v;
         swatches.forEach(({ btn, hex }) => {
           btn.classList.toggle("selected", hex.toLowerCase() === v.toLowerCase());
         });
@@ -1536,8 +1550,13 @@ function renderDetail(id) {
       picker.appendChild(swatchWrap);
 
       hexInput.addEventListener("input", sync);
+      nativePicker.addEventListener("input", () => {
+        hexInput.value = nativePicker.value;
+        sync();
+      });
       hexRow.appendChild(preview);
       hexRow.appendChild(hexInput);
+      hexRow.appendChild(nativePicker);
       picker.appendChild(hexRow);
 
       row.appendChild(picker);
