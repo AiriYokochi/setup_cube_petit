@@ -28,6 +28,7 @@ const STR = {
     back_up: "起動しました",
     no_response: "応答がありません(時間をおいて確認してください)",
     action_failed: "失敗しました",
+    timeout_error: "応答がありません(ネットワークが違う端末からは.local名が届かないことがあります)",
   },
   en: {
     title: "Cube Petit Fleet",
@@ -54,6 +55,7 @@ const STR = {
     back_up: "Back up",
     no_response: "No response (check back in a bit)",
     action_failed: "Failed",
+    timeout_error: "No response (a .local name may not resolve from a different network)",
   },
 };
 
@@ -101,13 +103,35 @@ const PETIT_FILTERS = {
 // robot the card belongs to, so every call crosses origins. CORSMiddleware
 // on the target robot's FastAPI app (main.py) is what makes the response
 // body readable here instead of an opaque no-cors result.
+//
+// Always time-boxed (default 8s): a plain fetch() with no abort signal
+// hangs indefinitely if the DNS/mDNS lookup for `host` never resolves or
+// the connection is silently dropped (observed from an iPad on a network
+// where cube-petit-*.local doesn't resolve/route -- the request just never
+// settles, which from the button's point of view looks identical to doing
+// nothing at all). Timing out turns that into a visible error instead.
 async function crossApi(host, port, path, opts = {}) {
-  const res = await fetch(`http://${host}:${port}${path}`, {
-    method: opts.method || "GET",
-    headers: { "Content-Type": "application/json" },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-    signal: opts.signal,
-  });
+  const timeoutMs = opts.timeoutMs ?? 8000;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  // If the caller also passed a signal, respect it too (whichever fires first).
+  if (opts.signal) opts.signal.addEventListener("abort", () => ctrl.abort());
+  let res;
+  try {
+    res = await fetch(`http://${host}:${port}${path}`, {
+      method: opts.method || "GET",
+      headers: { "Content-Type": "application/json" },
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    if (ctrl.signal.aborted) {
+      throw new Error(t("timeout_error"));
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   let payload = null;
   try {
     payload = await res.json();
@@ -131,7 +155,8 @@ async function waitForBackUp(host, port, status) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(2000); // let the old process actually exit first
   for (let i = 0; i < 30; i++) {
-    const alive = await crossApi(host, port, "/api/state").then(() => true).catch(() => false);
+    const alive = await crossApi(host, port, "/api/state", { timeoutMs: 3000 })
+      .then(() => true).catch(() => false);
     if (alive) {
       status.textContent = t("back_up");
       return;
