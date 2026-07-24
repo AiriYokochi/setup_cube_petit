@@ -33,6 +33,7 @@ const STR = {
     log_panel: "実行ログ",
     log_truncated: (n) => `(先頭 ${n} 行は省略)`,
     error: (msg) => `エラー: ${msg}`,
+    api_timeout_error: "サーバーからの応答がありません(ネットワークやセキュリティソフトが通信を止めている可能性があります)。",
     run: "実行",
     run_again: "もう一度実行",
     skip: "スキップ",
@@ -153,6 +154,7 @@ const STR = {
     log_panel: "Run log",
     log_truncated: (n) => `(first ${n} lines omitted)`,
     error: (msg) => `Error: ${msg}`,
+    api_timeout_error: "No response from the server (a network or security tool may be blocking the request).",
     run: "Run",
     run_again: "Run again",
     skip: "Skip",
@@ -316,12 +318,36 @@ function setLang(l) {
 }
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, {
-    method: opts.method || "GET",
-    headers: { "Content-Type": "application/json" },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-    signal: opts.signal,
-  });
+  // Time-boxed by default (20s): a bare fetch() with no abort signal hangs
+  // forever if something on the network path between the browser and this
+  // same-origin server never responds (observed: a GET with no body still
+  // hangs indefinitely on some networks even though curl to the same URL
+  // from another machine answers instantly -- suspected culprit below).
+  const timeoutMs = opts.timeoutMs ?? 20000;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  if (opts.signal) opts.signal.addEventListener("abort", () => ctrl.abort());
+  let res;
+  try {
+    res = await fetch(path, {
+      method: opts.method || "GET",
+      // Only set Content-Type when actually sending a body: some
+      // network middleboxes (security/AV web filters, corporate proxies)
+      // appear to mishandle a bodyless GET carrying
+      // Content-Type: application/json, causing the request to hang with
+      // no response at all rather than erroring cleanly.
+      headers: opts.body ? { "Content-Type": "application/json" } : undefined,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      signal: ctrl.signal,
+    });
+  } catch (e) {
+    if (ctrl.signal.aborted) {
+      throw new Error(t("api_timeout_error"));
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   let payload = null;
   try {
     payload = await res.json();
@@ -2052,7 +2078,21 @@ async function init() {
     setLang(LANG === "ja" ? "en" : "ja");
   });
 
-  await loadState();
+  try {
+    await loadState();
+  } catch (err) {
+    // Without this, a failed/timed-out initial load left the page stuck on
+    // its static shell forever with zero feedback -- indistinguishable from
+    // a page that's still loading (the exact symptom reported: endless
+    // spinner, empty step list, no error anywhere).
+    const ph = document.getElementById("placeholder-text");
+    if (ph) {
+      ph.textContent = t("error", err.message);
+      const reloadBtn = mkButton("secondary", t("reload_page"), () => location.reload());
+      ph.insertAdjacentElement("afterend", reloadBtn);
+    }
+    return;
+  }
   if (state.data.steps.length) {
     const firstNotDone = state.data.steps.find((s) => !["done", "skipped"].includes(s.status));
     selectStep(firstNotDone ? firstNotDone.id : state.data.steps[0].id);
