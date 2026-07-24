@@ -16,12 +16,12 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from fastapi import Body, FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import engine, state as state_mod, updates
+from . import engine, mapshare, state as state_mod, updates
 
 APP_DIR = Path(__file__).resolve().parent
 WEBAPP_DIR = APP_DIR.parent
@@ -329,6 +329,143 @@ async def get_fleet():
     except (OSError, yaml.YAMLError):
         data = {}
     return {"robots": data.get("robots", []), "ports": data.get("ports", {})}
+
+
+# --- map creation / save / share (map page) ---------------------------------
+#
+# A standalone page (/map, mirrors /fleet) for the "same map on every robot"
+# workflow: create a map with SLAM, save it, then hand a copy to another
+# individual's webapp over HTTP so every robot at an event navigates on the
+# exact same map. Not part of the linear wizard (steps.yaml) -- the "why" and
+# the actual command-building live in mapshare.py; this section is just the
+# thin routing layer, same division of labor as engine.py/updates.py above.
+#
+# Run tracking reuses the wizard's own step-status machinery (state.json's
+# "steps" dict + the generic /api/runs/{run_key}/stream SSE endpoint) under
+# two pseudo step ids, "map_create" and "map_save" -- state_mod doesn't
+# require a step to be declared in steps.yaml to track its status.
+
+_MAP_RUN_KEYS = ("map_create", "map_save")
+_NO_ROBOT_NAME = (
+    "個体名が未設定です。先にセットアップの「1. 前提確認」で個体名を入力してください。"
+)
+
+
+@app.get("/map")
+async def map_page():
+    return FileResponse(str(STATIC_DIR / "map.html"))
+
+
+@app.get("/api/maps")
+async def api_list_maps():
+    state = state_mod.load_state()
+    runs = {
+        key: {"running": engine.is_running(key), **state_mod.get_step_status(state, key)}
+        for key in _MAP_RUN_KEYS
+    }
+    return {
+        "robot_namespace": state.get("robot_namespace"),
+        "maps": mapshare.list_maps(),
+        "runs": runs,
+        "mock": engine.MOCK,
+    }
+
+
+@app.get("/api/maps/{name}/thumbnail.png")
+async def map_thumbnail(name: str):
+    try:
+        png = mapshare.thumbnail_png(name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if png is None:
+        raise HTTPException(404, "thumbnail not available")
+    return Response(content=png, media_type="image/png")
+
+
+@app.post("/api/maps/create/start")
+async def map_create_start():
+    state = state_mod.load_state()
+    if not state.get("robot_namespace"):
+        raise HTTPException(409, _NO_ROBOT_NAME)
+    if engine.is_running("map_create"):
+        raise HTTPException(409, "already running")
+    state_mod.set_step_status(state, "map_create", status="running", exit_code=None)
+    cmd = mapshare.build_create_cmd(state)
+    run = await engine.start_command("map_create", cmd, cwd=engine.REPO_ROOT)
+    asyncio.create_task(_watch_run("map_create", run))
+    return {"status": "started", "run_key": "map_create"}
+
+
+@app.post("/api/maps/create/stop")
+async def map_create_stop():
+    if not engine.is_running("map_create"):
+        raise HTTPException(400, "not running")
+    run = engine.get_run("map_create")
+    if run is not None:
+        run.broadcast("[中断] ユーザー操作により地図作成(SLAM)を停止します...")
+    ok = await engine.cancel("map_create")
+    if not ok:
+        raise HTTPException(409, "failed to cancel (process already exited?)")
+    return {"status": "stopping"}
+
+
+class MapSaveBody(BaseModel):
+    name: str
+
+
+@app.post("/api/maps/save")
+async def map_save(body: MapSaveBody):
+    state = state_mod.load_state()
+    if not state.get("robot_namespace"):
+        raise HTTPException(409, _NO_ROBOT_NAME)
+    try:
+        name = mapshare.validate_map_name(body.name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if engine.is_running("map_save"):
+        raise HTTPException(409, "already saving")
+    state_mod.set_step_status(state, "map_save", status="running", exit_code=None)
+    cmd = mapshare.build_save_cmd(name, state)
+    run = await engine.start_command("map_save", cmd, cwd=engine.REPO_ROOT)
+    asyncio.create_task(_watch_run("map_save", run))
+    return {"status": "started", "run_key": "map_save"}
+
+
+@app.delete("/api/maps/{name}")
+async def map_delete(name: str):
+    try:
+        mapshare.delete_map(name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except FileNotFoundError:
+        raise HTTPException(404, "map not found")
+    return {"status": "deleted"}
+
+
+class MapSendBody(BaseModel):
+    target_host: str
+    target_port: int = 8760
+
+
+@app.post("/api/maps/{name}/send")
+async def map_send(name: str, body: MapSendBody):
+    try:
+        name = mapshare.validate_map_name(name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return await mapshare.send_map(name, body.target_host.strip(), body.target_port)
+
+
+@app.post("/api/maps/receive")
+async def map_receive(request: Request, name: str):
+    """Receiving side of send_map() above: another robot's webapp POSTs a
+    tar.gz of its map directory here. No auth (same trust model as /fleet:
+    same-LAN, both sides are Cube Petit individuals)."""
+    payload = await request.body()
+    try:
+        return mapshare.receive_map(name, payload)
+    except Exception as e:
+        raise HTTPException(400, f"failed to receive map: {e}")
 
 
 # --- state / steps ---------------------------------------------------------

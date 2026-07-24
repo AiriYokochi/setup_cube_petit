@@ -141,6 +141,27 @@ petit導入・自動起動設定(Phase 3)は今後の対応です。
 詳細は `docs/cube_petit_setup_survey.md` と `plans/setup_webapp_plan.md`
 (orange_petit_claude リポジトリ)を参照してください。
 
+## 地図の作成・保存・共有 (`/map`)
+
+複数の個体が同じ会場で同じ地図(同じ原点・スケール)を使って自律走行するための、
+ウィザードとは独立したページです(`/fleet` と同じ位置づけ)。
+
+- **地図の作成**: `cube_petit_navigation` の `create_map_<個体名>.launch.py`
+  (無ければ汎用の `create_map.launch.py robot:=<個体名>`)でSLAMを起動します。
+  「停止」を押すまで動き続けます。
+- **地図の保存**: 名前を入力して保存すると `nav2_map_server` の `map_saver_cli`
+  が実行され、`~/map/<名前>/map.yaml` + `map.pgm` に保存されます(既存の運用と
+  同じ形式)。地図作成が起動中でないと `/map` トピックが来ないため保存できません。
+- **地図の一覧**: `~/map/` 配下を一覧表示し、pgm画像から簡易サムネイル(PNG、
+  追加ライブラリなしの自前エンコード)を生成します。
+- **他の個体への配布**: 選んだ地図を、`webapp/fleet.yaml` に登録済みの個体へ
+  HTTP経由でpush送信します(送信側が地図一式をtar.gzにまとめてPOST、受信側の
+  `/api/maps/receive` が展開して `~/map/<名前>/` に保存)。認証なし・同一LAN内の
+  信頼関係を前提にしています(`/fleet` と同じ考え方)。
+
+地図関連の実行(`map_create`/`map_save`)もウィザードの `/api/runs/{run_key}/stream`
+をそのまま流用してログをストリーミング表示します。詳細は `app/mapshare.py` を参照。
+
 ---
 
 # Cube Petit Setup Web App (Phase 1 / MVP) — English summary

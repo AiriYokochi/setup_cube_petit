@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cube Petit 地図管理</title>
+<link rel="icon" href="/static/petit.png">
+<link rel="stylesheet" href="/static/map.css">
+</head>
+<body>
+  <header class="map-topbar">
+    <h1 id="map-title">Cube Petit 地図管理</h1>
+    <span id="mock-badge" class="mock-badge" hidden>MOCK モード(疑似実行)</span>
+    <button id="lang-toggle" class="lang-toggle" type="button" title="Switch language">EN</button>
+    <a id="link-home" class="pill-link" href="/">セットアップ</a>
+    <a id="link-fleet" class="pill-link" href="/fleet">機体一覧</a>
+  </header>
+
+  <main class="map-layout">
+    <p id="no-robot-warning" class="warning-box" hidden></p>
+
+    <section class="map-section" id="section-create">
+      <h2 id="create-title">地図の作成</h2>
+      <p id="create-hint" class="section-hint"></p>
+      <p class="status-line" id="create-status"></p>
+      <div class="actions">
+        <button id="create-start-btn" class="primary" type="button">地図作成を開始(SLAMを起動)</button>
+        <button id="create-stop-btn" class="danger" type="button" disabled>停止</button>
+      </div>
+      <details class="log-panel" id="create-log-panel">
+        <summary id="create-log-summary">実行ログ</summary>
+        <div class="log-output" id="create-log-output"></div>
+      </details>
+    </section>
+
+    <section class="map-section" id="section-save">
+      <h2 id="save-title">地図の保存</h2>
+      <p id="save-hint" class="section-hint"></p>
+      <div class="input-row">
+        <label id="save-name-label" for="save-name-input">地図の名前</label>
+        <input id="save-name-input" type="text" placeholder="20260724_venue">
+        <span class="help" id="save-name-help"></span>
+      </div>
+      <p class="status-line" id="save-status"></p>
+      <div class="actions">
+        <button id="save-btn" class="primary" type="button">この地図を保存</button>
+      </div>
+      <details class="log-panel" id="save-log-panel">
+        <summary id="save-log-summary">実行ログ</summary>
+        <div class="log-output" id="save-log-output"></div>
+      </details>
+    </section>
+
+    <section class="map-section" id="section-list">
+      <h2 id="list-title">保存済みの地図</h2>
+      <div class="actions">
+        <button id="refresh-btn" class="secondary" type="button">更新</button>
+      </div>
+      <div id="map-grid" class="map-grid"></div>
+    </section>
+  </main>
+
+  <template id="tpl-map-card">
+    <div class="map-card">
+      <img class="map-thumb" alt="">
+      <div class="map-card-body">
+        <div class="map-name"></div>
+        <div class="map-meta"></div>
+        <div class="map-badges"></div>
+        <div class="map-send-row">
+          <select class="map-send-select"></select>
+          <button class="secondary map-send-btn" type="button"></button>
+        </div>
+        <p class="map-send-result" hidden></p>
+        <button class="danger map-delete-btn" type="button"></button>
+      </div>
+    </div>
+  </template>
+
+  <script src="/static/map.js"></script>
+</body>
+</html>
