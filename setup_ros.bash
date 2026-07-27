@@ -85,6 +85,20 @@ echo -e '\e[1;31m == Install cube_petit_ros == \e[m'
 cd "$ROS_WS/src/"
 git clone https://github.com/sbgisen/cube_petit_ros.git -b jazzy-devel
 vcs import . < ./cube_petit_ros/cube_petit_ros.repos
+
+# Install cube_petit_interaction and cube_petit_scenario. These used to be
+# cloned by hand per-robot (yellow was missing cube_petit_interaction
+# entirely, pink had it on an unrelated commit) -- pulling them in here
+# keeps every individual's workspace in sync with what the wizard actually
+# sets up, same as cube_petit_ros itself.
+echo -e '\e[1;31m == Install cube_petit_interaction == \e[m'
+git clone git@github.com:sbgisen/cube_petit_interaction.git -b jazzy-devel
+vcs import . < ./cube_petit_interaction/cube_petit_interaction.repos
+
+echo -e '\e[1;31m == Install cube_petit_scenario == \e[m'
+git clone git@github.com:sbgisen/cube_petit_scenario.git -b jazzy-devel
+vcs import . < ./cube_petit_scenario/cube_petit_scenario.repos
+
 source /opt/ros/jazzy/setup.bash
 rosdep install --from-path . --ignore-src -r -y
 source ~/work/cube_petit_setup/submodule_recursive.bash
