@@ -52,9 +52,24 @@ fi
 # face_color:=<hex> only when the wizard has a chosen color to bake in --
 # otherwise leave 01_BRING as-is and let cube_petit_bringup.launch.py fall
 # back to its own default.
+#
+# The value MUST be wrapped in literal double quotes (cube_petit_setup#59):
+# ros2 launch's own CLI parser just splits "name:=value" on ":=" (no shell
+# involved), but launch_ros then yaml.safe_load()s the value to infer the ROS
+# parameter type for cube_petit_facial_animation's "color" Node parameter. A
+# value starting with '#' -- any hex color, e.g. #ffa500 -- is valid YAML for
+# "rest of the line is a comment" and evaluates to None, crashing the launch.
+# This text goes through bash quote-removal THREE times before ros2 launch
+# ever sees it (this heredoc's `alias 01_BRING="..."` line -> .bashrc being
+# sourced, which parses that alias definition -> the alias being expanded at
+# the point 01_BRING is actually typed), so the escaped quotes below need one
+# extra backslash per layer to still be literal double-quote characters by
+# the time ros2 launch parses "name:=value" (verified empirically -- see
+# worklog). Harmless for plain color names too (e.g. "orange"), so always
+# quote rather than special-casing hex codes.
 BRING_FACE_COLOR_ARG=""
 if [ -n "${FACE_COLOR:-}" ]; then
-  BRING_FACE_COLOR_ARG=" face_color:=${FACE_COLOR}"
+  BRING_FACE_COLOR_ARG=" face_color:=\\\\\\\"${FACE_COLOR}\\\\\\\""
 fi
 
 touch "$BASHRC"

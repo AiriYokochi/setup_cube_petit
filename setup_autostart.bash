@@ -35,9 +35,23 @@ ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-94}"
 # face_color:=<hex> only when the wizard has a chosen color to bake in --
 # otherwise leave the launch command as-is and let
 # cube_petit_bringup.launch.py fall back to its own default.
+#
+# The value MUST be wrapped in literal double quotes (cube_petit_setup#59):
+# ros2 launch's own CLI parser just splits "name:=value" on ":=" (no shell
+# involved), but launch_ros then yaml.safe_load()s the value to infer the ROS
+# parameter type for cube_petit_facial_animation's "color" Node parameter. A
+# value starting with '#' -- any hex color, e.g. #ffa500 -- is valid YAML for
+# "rest of the line is a comment" and evaluates to None, crashing the launch.
+# Embedding literal double quotes (escaped here so they survive as literal
+# characters in the launcher script written below, instead of being consumed
+# as bash quoting) makes yaml.safe_load() treat the value as a quoted string
+# instead: this is the fix launch_ros's own evaluate_parameter_dict() docstring
+# recommends ("If you want the substitution to stay a string, the output of
+# the substitution must have quotes"). Harmless for plain color names too
+# (e.g. "orange"), so always quote rather than special-casing hex codes.
 BRING_FACE_COLOR_ARG=""
 if [ -n "${FACE_COLOR:-}" ]; then
-  BRING_FACE_COLOR_ARG=" face_color:=${FACE_COLOR}"
+  BRING_FACE_COLOR_ARG=" face_color:=\\\"${FACE_COLOR}\\\""
 fi
 
 if [ "$AUTOSTART_ENABLED" != "true" ]; then
