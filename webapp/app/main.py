@@ -267,19 +267,8 @@ def _parse_check_log(raw_log: str) -> list[dict]:
 
 
 # --- ROS_DOMAIN_ID suggestion ------------------------------------------------
-
-def _suggested_domain_id(robot_namespace: Optional[str]) -> str:
-    """Deterministic per-robot ROS_DOMAIN_ID suggestion, so two robots set up
-    with defaults never share a domain (orange's face once showed up on
-    yellow -- both were on 94). orange keeps its long-standing 94; every
-    other name maps into 95-123 via a stable hash of the name."""
-    import zlib
-
-    if not robot_namespace:
-        return "94"
-    if robot_namespace == "cube_petit_orange":
-        return "94"
-    return str(95 + zlib.crc32(robot_namespace.encode("utf-8")) % 29)
+# The suggestion logic itself lives in engine.suggested_domain_id so the
+# per-step env fallbacks there can share it.
 
 
 def _env_setup_inputs(state: dict, input_defs: list[dict]) -> list[dict]:
@@ -290,7 +279,7 @@ def _env_setup_inputs(state: dict, input_defs: list[dict]) -> list[dict]:
     out = []
     for d in input_defs:
         if d["id"] == "ros_domain_id":
-            d = {**d, "default": _suggested_domain_id(state.get("robot_namespace"))}
+            d = {**d, "default": engine.suggested_domain_id(state.get("robot_namespace"))}
         out.append(d)
     return out
 

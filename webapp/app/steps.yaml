@@ -225,8 +225,8 @@ steps:
         label_en: "ROS_DOMAIN_ID"
         type: text
         # The static default is a fallback: /api/state overrides it with a
-        # value derived from the robot name (see _suggested_domain_id in
-        # main.py) so two robots on the same Wi-Fi don't collide on 94 --
+        # value derived from the robot name (see suggested_domain_id in
+        # engine.py) so two robots on the same Wi-Fi don't collide on 94 --
         # that actually happened (orange's face showed up on yellow).
         default: "94"
         required: true
