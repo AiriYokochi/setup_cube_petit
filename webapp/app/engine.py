@@ -1027,6 +1027,21 @@ def ros_ws_env(state: dict) -> dict:
     return {}
 
 
+def suggested_domain_id(robot_namespace: Optional[str]) -> str:
+    """Deterministic per-robot ROS_DOMAIN_ID suggestion, so two robots set up
+    with defaults never share a domain (orange's face once showed up on
+    yellow -- both were on 94). orange keeps its long-standing 94; every
+    other name maps into 95-123 via a stable hash of the name. Lives here
+    (not main.py) so the env fallbacks below can use it too."""
+    import zlib
+
+    if not robot_namespace:
+        return "94"
+    if robot_namespace == "cube_petit_orange":
+        return "94"
+    return str(95 + zlib.crc32(robot_namespace.encode("utf-8")) % 29)
+
+
 def _extra_env_for(step_id: str, state: dict, inputs: dict) -> dict:
     """Per-step environment overrides for the child process, layered on top
     of _child_env(). Centralizes the two cases where a step needs values
@@ -1037,7 +1052,12 @@ def _extra_env_for(step_id: str, state: dict, inputs: dict) -> dict:
     if step_id == "env_setup":
         env = {
             "ROBOT_NAMESPACE": state.get("robot_namespace") or "",
-            "ROS_DOMAIN_ID": str(inputs.get("ros_domain_id") or "94"),
+            # No hardcoded 94 fallback: two robots silently sharing domain 94
+            # is exactly the collision this setup is meant to prevent.
+            "ROS_DOMAIN_ID": str(
+                inputs.get("ros_domain_id")
+                or suggested_domain_id(state.get("robot_namespace"))
+            ),
         }
         api_key = inputs.get("openai_api_key")
         if api_key:
@@ -1060,7 +1080,10 @@ def _extra_env_for(step_id: str, state: dict, inputs: dict) -> dict:
         env = {
             "AUTOSTART_ENABLED": "true" if inputs.get("autostart_enabled", True) else "false",
             "ROBOT_NAMESPACE": state.get("robot_namespace") or "",
-            "ROS_DOMAIN_ID": str(env_inputs.get("ros_domain_id") or "94"),
+            "ROS_DOMAIN_ID": str(
+                env_inputs.get("ros_domain_id")
+                or suggested_domain_id(state.get("robot_namespace"))
+            ),
         }
         # Same chosen face color as env_setup above, baked into the systemd
         # launcher script (see setup_autostart.bash) so autostart boots with

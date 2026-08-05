@@ -15,8 +15,10 @@
 # Idempotent: re-running regenerates both files and re-applies enable/disable.
 #
 # Required env: AUTOSTART_ENABLED ("true"/"false")
-# Required env when enabling: ROBOT_NAMESPACE
-# Optional env: ROS_DOMAIN_ID (default 94), CUBE_PETIT_ROS_WS (default ~/ros),
+# Required env when enabling: ROBOT_NAMESPACE, ROS_DOMAIN_ID (no default:
+#   a silent 94 fallback once put two robots on the same domain and crossed
+#   their TF trees -- the caller must pass the per-robot value explicitly)
+# Optional env: CUBE_PETIT_ROS_WS (default ~/ros),
 #   FACE_COLOR (hex code, e.g. #ffa500 -- chosen in the setup wizard's
 #   prereq step; baked into the generated launcher so autostart boots with
 #   the user's choice instead of cube_petit_bringup's own hostname-derived
@@ -30,7 +32,6 @@ SERVICE_DIR="$HOME/.config/systemd/user"
 SERVICE_PATH="$SERVICE_DIR/$SERVICE_NAME"
 LAUNCHER="$HOME/.local/bin/cube_petit_bringup_launch.sh"
 ROS_WS="${CUBE_PETIT_ROS_WS:-$HOME/ros}"
-ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-94}"
 
 # face_color:=<hex> only when the wizard has a chosen color to bake in --
 # otherwise leave the launch command as-is and let
@@ -55,6 +56,7 @@ if [ "$AUTOSTART_ENABLED" != "true" ]; then
 fi
 
 : "${ROBOT_NAMESPACE:?ROBOT_NAMESPACE is required when enabling autostart}"
+: "${ROS_DOMAIN_ID:?ROS_DOMAIN_ID is required when enabling autostart (per-robot value, no shared default)}"
 
 echo -e '\e[1;31m == Enable robot autostart (bringup on boot) == \e[m'
 
@@ -85,6 +87,11 @@ if [ -n "\${CUBE_PETIT_AUTOSTART_DISABLE:-}" ]; then
   echo "Autostart disabled via CUBE_PETIT_AUTOSTART_DISABLE in \$CUBE_PETIT_ENV_FILE"
   exit 0
 fi
+
+# systemd user services get a minimal PATH without ~/.local/bin, where uv
+# lives -- without this, every node whose entry point runs through uv dies
+# at startup with "/usr/bin/env: 'uv': No such file or directory".
+export PATH="\$HOME/.local/bin:\$PATH"
 
 source /opt/ros/jazzy/setup.bash
 if [ -f "$ROS_WS/install/setup.bash" ]; then
